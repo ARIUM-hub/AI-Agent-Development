@@ -1,5 +1,6 @@
 from dev_agent.memory.keyword import KeywordRetriever
 from dev_agent.memory.models import ExperienceRecord, TaskRecord
+from dev_agent.memory.retriever import MemoryRetriever
 from dev_agent.memory.vector import HashEmbeddingProvider, VectorIndex
 
 
@@ -54,3 +55,26 @@ def test_vector_index_returns_nearest_text() -> None:
     assert hits[0].record_id == "exp-1"
     assert hits[0].kind == "experience"
     assert hits[0].score > 0
+
+
+def test_memory_retriever_combines_keyword_and_vector_hits_without_duplicates() -> None:
+    tasks = [
+        TaskRecord(
+            task_id="task-1",
+            title="修复 Windows 中文乱码",
+            status="passed",
+            summary="Windows UTF-8 编码修复",
+        )
+    ]
+    experiences = [
+        ExperienceRecord(
+            experience_id="exp-1",
+            source_task_id="task-1",
+            text="提交前必须运行完整测试。",
+        )
+    ]
+
+    hits = MemoryRetriever(tasks, experiences).search("UTF-8 编码 完整测试")
+
+    assert [hit.record_id for hit in hits] == ["task-1", "exp-1"]
+    assert hits[0].score >= hits[1].score
