@@ -39,12 +39,28 @@ class ExecutionChange:
 
 
 @dataclass(frozen=True)
+class ExecutionPreviewChange:
+    action: str
+    path: str
+    exists: bool
+    content_bytes: int
+    risk: str
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
 class ExecutionResult:
     applied: bool
     planned_changes: list[dict[str, object]]
+    preview_changes: list[ExecutionPreviewChange] = field(default_factory=list)
     changes: list[ExecutionChange] = field(default_factory=list)
     diff_stat: str = ""
     error: str | None = None
+
+    def preview_changes_as_dicts(self) -> list[dict[str, object]]:
+        return [change.to_dict() for change in self.preview_changes]
 
     def changes_as_dicts(self) -> list[dict[str, object]]:
         return [change.to_dict() for change in self.changes]

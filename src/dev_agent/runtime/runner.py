@@ -32,36 +32,37 @@ class LocalTaskRunner:
         task = update_task_status(self.repo_root, task.task_id, TaskStatus.RUNNING, "provider_completed")
         events = [*task.events]
         verification_result = None
-        execution_result = self._execution_preview(options)
+        execution_result = ExecutionResult(applied=False, planned_changes=[])
         execution_error = None
-        if options.apply_changes:
-            try:
+        try:
+            execution_result = self._execution_preview(options)
+            if options.apply_changes:
                 execution_result = self._apply_execution_plan(options)
                 task = update_task_status(self.repo_root, task.task_id, TaskStatus.RUNNING, "execution_completed")
                 events = [*task.events]
-            except ExecutionPlanError as exc:
-                execution_error = str(exc)
-                task = update_task_status(self.repo_root, task.task_id, TaskStatus.FAILED, "execution_failed")
-                self._record_history(
-                    task_id=task.task_id,
-                    title=user_request,
-                    status=task.status.value,
-                    summary=f"{response.text}\n\n执行失败：{execution_error}",
-                    events=task.events,
-                    verification=[" ".join(step.command) for step in context.verification_plan.steps],
-                )
-                return TaskRunResult(
-                    task_id=task.task_id,
-                    plan_text=response.text,
-                    dry_run=options.dry_run,
-                    memory_hit_count=len(context.memory_hits),
-                    verification_steps=[step.command for step in context.verification_plan.steps],
-                    events=task.events,
-                    planned_changes=execution_result.planned_changes,
-                    applied_changes=execution_result.changes_as_dicts(),
-                    diff_stat=execution_result.diff_stat,
-                    execution_error=execution_error,
-                )
+        except ExecutionPlanError as exc:
+            execution_error = str(exc)
+            task = update_task_status(self.repo_root, task.task_id, TaskStatus.FAILED, "execution_failed")
+            self._record_history(
+                task_id=task.task_id,
+                title=user_request,
+                status=task.status.value,
+                summary=f"{response.text}\n\n执行失败：{execution_error}",
+                events=task.events,
+                verification=[" ".join(step.command) for step in context.verification_plan.steps],
+            )
+            return TaskRunResult(
+                task_id=task.task_id,
+                plan_text=response.text,
+                dry_run=options.dry_run,
+                memory_hit_count=len(context.memory_hits),
+                verification_steps=[step.command for step in context.verification_plan.steps],
+                events=task.events,
+                planned_changes=execution_result.planned_changes,
+                applied_changes=execution_result.changes_as_dicts(),
+                diff_stat=execution_result.diff_stat,
+                execution_error=execution_error,
+            )
         if options.run_verification:
             verification_result = VerificationRunner(self.repo_root).run(context.verification_plan)
             task = update_task_status(self.repo_root, task.task_id, TaskStatus.RUNNING, "verification_completed")
