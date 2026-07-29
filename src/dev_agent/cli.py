@@ -104,6 +104,24 @@ def _preview_execution_plan(execution_plan):
     return ExecutionPlanApplier(Path.cwd()).preview(execution_plan).preview_changes_as_dicts()
 
 
+def _preview_payload(args: Namespace, execution_plan, preview_changes: list[dict[str, object]]) -> dict[str, object]:
+    planned_changes = [] if execution_plan is None else [operation.to_dict() for operation in execution_plan.operations]
+    return {
+        "task_id": None,
+        "plan_text": args.fake_response,
+        "dry_run": True,
+        "memory_hit_count": 0,
+        "verification_steps": [],
+        "verification_passed": None,
+        "events": ["execution_previewed"],
+        "planned_changes": planned_changes,
+        "preview_changes": preview_changes,
+        "applied_changes": [],
+        "diff_stat": "",
+        "execution_error": None,
+    }
+
+
 def _confirm_apply(args: Namespace) -> bool:
     if not args.apply:
         return True
@@ -130,6 +148,9 @@ def run_command(args: Namespace) -> int:
     except ExecutionPlanError as exc:
         sys.stderr.write(f"执行计划预览失败：{exc}\n")
         return 2
+    if execution_plan is not None and not args.apply:
+        sys.stdout.write(_json(_preview_payload(args, execution_plan, preview_changes)))
+        return 0
     if not _confirm_apply(args):
         sys.stderr.write("应用执行计划需要确认；请传入 --yes 或在交互式终端输入 yes。\n")
         return 2

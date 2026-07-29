@@ -197,6 +197,7 @@ def test_run_previews_plan_file_without_apply(tmp_path: Path) -> None:
     assert payload["preview_changes"][0]["risk"] == "create"
     assert payload["preview_changes"][0]["content_bytes"] == len("只预览\n".encode("utf-8"))
     assert payload["applied_changes"] == []
+    assert not (tmp_path / ".agent").exists()
     assert not (tmp_path / "docs" / "preview.md").exists()
 
 
@@ -243,6 +244,7 @@ def test_run_preview_outputs_preview_changes_without_writing(tmp_path: Path) -> 
         }
     ]
     assert payload["applied_changes"] == []
+    assert not (tmp_path / ".agent").exists()
     assert not write_target.exists()
 
 
