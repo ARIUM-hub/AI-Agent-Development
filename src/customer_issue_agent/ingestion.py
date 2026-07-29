@@ -6,6 +6,20 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
+BATCH_LIMIT = 50
+BATCH_TEXT_KEYS = (
+    "conversation",
+    "conversation_text",
+    "message",
+    "text",
+    "content",
+    "body",
+    "客服会话",
+    "会话",
+    "消息",
+    "内容",
+)
+
 
 def extract_conversation_text(filename: str, content: bytes) -> str:
     suffix = Path(filename).suffix.lower()
@@ -22,6 +36,26 @@ def extract_conversation_text(filename: str, content: bytes) -> str:
     cleaned = text.strip()
     if not cleaned:
         raise ValueError("没有可分析内容")
+    return cleaned
+
+
+def extract_batch_conversation_texts(filename: str, content: bytes, limit: int = BATCH_LIMIT) -> list[str]:
+    suffix = Path(filename).suffix.lower()
+
+    if suffix in {".txt", ".log"}:
+        conversations = _split_batch_text(_decode_text(content))
+    elif suffix == ".csv":
+        conversations = _extract_batch_csv(content)
+    elif suffix in {".xlsx", ".xlsm"}:
+        conversations = _extract_batch_xlsx(content)
+    else:
+        raise ValueError("仅支持 txt、log、csv、xlsx 或 xlsm 文件")
+
+    cleaned = [item.strip() for item in conversations if item and item.strip()]
+    if not cleaned:
+        raise ValueError("文件中没有可分析会话，请检查导出内容")
+    if len(cleaned) > limit:
+        raise ValueError(f"单次最多分析 {limit} 条，请拆分文件后重试")
     return cleaned
 
 
@@ -48,6 +82,27 @@ def _extract_csv(content: bytes) -> str:
     return decoded
 
 
+def _split_batch_text(text: str) -> list[str]:
+    normalized = text.replace("\r\n", "\n")
+    for separator in ("\n---\n", "\n===\n"):
+        if separator in normalized:
+            return normalized.split(separator)
+    return [normalized]
+
+
+def _extract_batch_csv(content: bytes) -> list[str]:
+    decoded = _decode_text(content)
+    reader = csv.DictReader(StringIO(decoded))
+    rows: list[str] = []
+    for row in reader:
+        conversation = _first_value(row, BATCH_TEXT_KEYS)
+        if conversation:
+            rows.append(conversation)
+    if rows:
+        return rows
+    return _split_batch_text(decoded)
+
+
 def _extract_xlsx(content: bytes) -> str:
     workbook = load_workbook(BytesIO(content), read_only=True, data_only=True)
     sheet = workbook.active
@@ -72,6 +127,26 @@ def _extract_xlsx(content: bytes) -> str:
             if line:
                 lines.append(line)
     return "\n".join(lines)
+
+
+def _extract_batch_xlsx(content: bytes) -> list[str]:
+    workbook = load_workbook(BytesIO(content), read_only=True, data_only=True)
+    sheet = workbook.active
+    rows = list(sheet.iter_rows(values_only=True))
+    if not rows:
+        return []
+
+    headers = [str(value).strip() if value is not None else "" for value in rows[0]]
+    conversation_index = _first_index(headers, BATCH_TEXT_KEYS)
+    conversations: list[str] = []
+
+    for row in rows[1:]:
+        values = ["" if value is None else str(value).strip() for value in row]
+        if conversation_index is not None and conversation_index < len(values):
+            conversations.append(values[conversation_index])
+        else:
+            conversations.append(" ".join(value for value in values if value))
+    return conversations
 
 
 def _first_value(row: dict[str, str | None], keys: tuple[str, ...]) -> str | None:
