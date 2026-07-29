@@ -316,6 +316,41 @@ textarea:focus-visible {
   justify-content: flex-start;
 }
 
+.record-detail-toggle {
+  margin-top: 12px;
+}
+
+.record-detail {
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fbfcf8;
+  white-space: normal;
+}
+
+.record-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin: 0;
+}
+
+.record-detail-grid div {
+  min-width: 0;
+}
+
+.record-detail-grid dt {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.record-detail-grid dd {
+  margin: 6px 0 0;
+  line-height: 1.6;
+}
+
 .record-filter {
   display: grid;
   grid-template-columns: minmax(220px, 1.5fr) repeat(3, minmax(160px, 1fr)) auto;
@@ -495,7 +530,8 @@ textarea:focus-visible {
 
   .tabs,
   .summary-strip,
-  .result-grid {
+  .result-grid,
+  .record-detail-grid {
     grid-template-columns: 1fr;
   }
 

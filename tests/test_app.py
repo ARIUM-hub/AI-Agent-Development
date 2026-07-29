@@ -658,3 +658,17 @@ def test_static_app_js_contains_record_detail_hooks(tmp_path):
     assert "data-record-detail-toggle" in script
     assert "aria-expanded" in script
     assert "收起详情" in script
+
+
+def test_styles_cover_record_detail_components(tmp_path):
+    app = create_app(storage_path=tmp_path / "analyses.jsonl")
+    client = TestClient(app)
+
+    response = client.get("/static/styles.css")
+
+    assert response.status_code == 200
+    css = response.text
+    assert ".record-detail-toggle" in css
+    assert ".record-detail" in css
+    assert ".record-detail-grid" in css
+    assert ".record-detail-grid dt" in css
