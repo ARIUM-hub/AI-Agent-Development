@@ -4,7 +4,8 @@ import json
 import sys
 
 from dev_agent import __version__
-from dev_agent.encoding import UTF8, utf8_environment_hint, write_text_utf8
+from dev_agent.encoding import UTF8, read_text_utf8, utf8_environment_hint, write_text_utf8
+from dev_agent.execution.plan import ExecutionPlanError, parse_execution_plan
 from dev_agent.memory.retriever import MemoryRetriever
 from dev_agent.memory.store import MemoryStore
 from dev_agent.project.scanner import scan_project
@@ -87,7 +88,24 @@ def history_command(args: Namespace) -> int:
     return 0
 
 
+def _load_execution_plan(path: str | None):
+    if path is None:
+        return None
+    try:
+        return parse_execution_plan(json.loads(read_text_utf8(Path(path))))
+    except (json.JSONDecodeError, ExecutionPlanError) as exc:
+        raise ValueError(f"无法读取执行计划：{exc}") from exc
+
+
 def run_command(args: Namespace) -> int:
+    if args.apply and args.plan_file is None:
+        sys.stderr.write("--plan-file is required when --apply is used\n")
+        return 2
+    try:
+        execution_plan = _load_execution_plan(args.plan_file)
+    except ValueError as exc:
+        sys.stderr.write(str(exc) + "\n")
+        return 2
     runner = LocalTaskRunner(
         repo_root=Path.cwd(),
         home_dir=Path.home(),
@@ -95,7 +113,12 @@ def run_command(args: Namespace) -> int:
     )
     result = runner.run(
         args.request,
-        TaskRunOptions(dry_run=args.dry_run, run_verification=args.verify),
+        TaskRunOptions(
+            dry_run=args.dry_run,
+            run_verification=args.verify,
+            apply_changes=args.apply,
+            execution_plan=execution_plan,
+        ),
     )
     payload = {
         "task_id": result.task_id,
@@ -105,9 +128,13 @@ def run_command(args: Namespace) -> int:
         "verification_steps": result.verification_steps,
         "verification_passed": None if result.verification_result is None else result.verification_result.passed,
         "events": result.events,
+        "planned_changes": result.planned_changes,
+        "applied_changes": result.applied_changes,
+        "diff_stat": result.diff_stat,
+        "execution_error": result.execution_error,
     }
     sys.stdout.write(_json(payload))
-    return 0
+    return 1 if result.execution_error else 0
 
 
 def serve_command(args: Namespace) -> int:
@@ -160,6 +187,8 @@ def build_parser() -> ArgumentParser:
     run_parser.add_argument("--fake-response", required=True)
     run_parser.add_argument("--dry-run", action="store_true", default=True)
     run_parser.add_argument("--verify", action="store_true")
+    run_parser.add_argument("--plan-file")
+    run_parser.add_argument("--apply", action="store_true")
     run_parser.set_defaults(handler=run_command)
 
     serve_parser = subparsers.add_parser("serve")
