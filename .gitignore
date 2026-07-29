@@ -2,3 +2,5 @@
 .worktrees/
 .superpowers
 .superpowers/
+__pycache__/
+*.py[cod]
