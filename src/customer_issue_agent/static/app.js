@@ -29,6 +29,7 @@ document.addEventListener("DOMContentLoaded", () => {
   bindAnalysisForm("upload-form", "upload-error");
   bindBatchForm();
   bindFeedbackForms(document);
+  bindRecordFilters();
 });
 
 function bindTabs() {
@@ -263,6 +264,11 @@ function prependRecentRecord(payload) {
   const article = document.createElement("article");
   article.className = "record";
   article.dataset.recordId = payload.record_id;
+  article.dataset.platform = analysis.request.platform;
+  article.dataset.issueCategory = attribution.issue_category;
+  article.dataset.responsibility = attribution.primary_responsibility;
+  article.dataset.feedbackStatus = "unreviewed";
+  article.dataset.searchText = `${payload.record_id} ${analysis.request.platform} ${analysis.report}`;
   article.innerHTML = `
     <div class="record-meta">
       <strong>${escapeHtml(analysis.request.platform)}</strong>
@@ -273,6 +279,7 @@ function prependRecentRecord(payload) {
     <p>${escapeHtml(analysis.report)}</p>
   `;
   list.prepend(article);
+  applyRecordFilters();
 }
 
 function resultCard(title, body) {
@@ -304,6 +311,67 @@ function rootCauseLabel(value) {
     non_usage_issue: "非产品使用问题",
   };
   return rootCauses[value] || value || "未知";
+}
+
+function bindRecordFilters() {
+  const form = document.getElementById("record-filter");
+  if (!form) {
+    return;
+  }
+
+  form.addEventListener("input", () => applyRecordFilters());
+  form.addEventListener("change", () => applyRecordFilters());
+
+  const reset = form.querySelector("[data-filter-reset]");
+  if (reset) {
+    reset.addEventListener("click", () => resetRecordFilters(form));
+  }
+
+  applyRecordFilters();
+}
+
+function applyRecordFilters() {
+  const records = Array.from(document.querySelectorAll("#recent-records .record"));
+  const query = document.getElementById("record-search")?.value.trim().toLowerCase() || "";
+  const issue = document.getElementById("issue-filter")?.value || "";
+  const responsibility = document.getElementById("responsibility-filter")?.value || "";
+  const feedback = document.getElementById("feedback-filter")?.value || "";
+  let visible = 0;
+
+  records.forEach((record) => {
+    const matches = recordMatchesFilters(record, { query, issue, responsibility, feedback });
+    record.hidden = !matches;
+    if (matches) {
+      visible += 1;
+    }
+  });
+
+  updateFilterState(visible, records.length);
+}
+
+function resetRecordFilters(form) {
+  form.reset();
+  applyRecordFilters();
+}
+
+function recordMatchesFilters(record, filters) {
+  const searchText = (record.dataset.searchText || "").toLowerCase();
+  const matchesQuery = !filters.query || searchText.includes(filters.query);
+  const matchesIssue = !filters.issue || record.dataset.issueCategory === filters.issue;
+  const matchesResponsibility = !filters.responsibility || record.dataset.responsibility === filters.responsibility;
+  const matchesFeedback = !filters.feedback || record.dataset.feedbackStatus === filters.feedback;
+  return matchesQuery && matchesIssue && matchesResponsibility && matchesFeedback;
+}
+
+function updateFilterState(visible, total) {
+  const count = document.getElementById("filter-count");
+  const empty = document.getElementById("filter-empty");
+  if (count) {
+    count.textContent = `当前显示 ${visible} / ${total} 条`;
+  }
+  if (empty) {
+    empty.hidden = visible > 0 || total === 0;
+  }
 }
 
 function readError(payload) {

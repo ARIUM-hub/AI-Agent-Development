@@ -316,6 +316,43 @@ textarea:focus-visible {
   justify-content: flex-start;
 }
 
+.record-filter {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.5fr) repeat(3, minmax(160px, 1fr)) auto;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.filter-field {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.filter-field span,
+.filter-count {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.filter-count {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.filter-empty {
+  margin: 16px 0 0;
+  padding: 16px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  text-align: center;
+}
+
 .batch-results:empty {
   display: none;
 }
@@ -367,6 +404,10 @@ textarea:focus-visible {
 
 @media (max-width: 900px) {
   .workspace-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .record-filter {
     grid-template-columns: 1fr;
   }
 }

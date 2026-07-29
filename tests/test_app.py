@@ -331,3 +331,31 @@ def test_recent_records_include_filter_data_attributes(tmp_path):
     assert 'data-responsibility="' in html
     assert 'data-feedback-status="accepted"' in html
     assert 'data-search-text="' in html
+
+
+def test_static_app_js_contains_recent_record_filter_hooks(tmp_path):
+    app = create_app(storage_path=tmp_path / "analyses.jsonl")
+    client = TestClient(app)
+
+    response = client.get("/static/app.js")
+
+    assert response.status_code == 200
+    script = response.text
+    assert "bindRecordFilters" in script
+    assert "applyRecordFilters" in script
+    assert "resetRecordFilters" in script
+    assert "recordMatchesFilters" in script
+
+
+def test_styles_cover_recent_record_filter_components(tmp_path):
+    app = create_app(storage_path=tmp_path / "analyses.jsonl")
+    client = TestClient(app)
+
+    response = client.get("/static/styles.css")
+
+    assert response.status_code == 200
+    css = response.text
+    assert ".record-filter" in css
+    assert ".filter-field" in css
+    assert ".filter-count" in css
+    assert ".filter-empty" in css
