@@ -104,6 +104,18 @@ def _preview_execution_plan(execution_plan):
     return ExecutionPlanApplier(Path.cwd()).preview(execution_plan).preview_changes_as_dicts()
 
 
+def _confirm_apply(args: Namespace) -> bool:
+    if not args.apply:
+        return True
+    if args.yes:
+        return True
+    if not sys.stdin.isatty():
+        return False
+    sys.stderr.write("应用执行计划需要确认。输入 yes 继续：")
+    answer = sys.stdin.readline().strip()
+    return answer == "yes"
+
+
 def run_command(args: Namespace) -> int:
     if args.apply and args.plan_file is None:
         sys.stderr.write("--plan-file is required when --apply is used\n")
@@ -117,6 +129,9 @@ def run_command(args: Namespace) -> int:
         preview_changes = _preview_execution_plan(execution_plan)
     except ExecutionPlanError as exc:
         sys.stderr.write(f"执行计划预览失败：{exc}\n")
+        return 2
+    if not _confirm_apply(args):
+        sys.stderr.write("应用执行计划需要确认；请传入 --yes 或在交互式终端输入 yes。\n")
         return 2
     runner = LocalTaskRunner(
         repo_root=Path.cwd(),
@@ -203,6 +218,7 @@ def build_parser() -> ArgumentParser:
     run_parser.add_argument("--plan-file")
     run_parser.add_argument("--preview", action="store_true")
     run_parser.add_argument("--apply", action="store_true")
+    run_parser.add_argument("--yes", action="store_true")
     run_parser.set_defaults(handler=run_command)
 
     serve_parser = subparsers.add_parser("serve")

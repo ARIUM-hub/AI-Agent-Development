@@ -152,6 +152,7 @@ def test_run_applies_plan_file_and_reports_changes(tmp_path: Path) -> None:
         "--plan-file",
         str(plan_file),
         "--apply",
+        "--yes",
     )
 
     assert result.returncode == 0
@@ -309,3 +310,38 @@ def test_run_reports_missing_plan_file_as_cli_error(tmp_path: Path) -> None:
 
     assert result.returncode == 2
     assert "无法读取执行计划" in result.stderr
+
+
+def test_run_apply_without_confirmation_rejects_and_does_not_write(tmp_path: Path) -> None:
+    plan_file = tmp_path / "plan.json"
+    plan_file.write_text(
+        json.dumps(
+            {
+                "summary": "需要确认",
+                "operations": [
+                    {
+                        "action": "create_text",
+                        "path": "docs/needs-confirmation.md",
+                        "content": "不应写入\n",
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_cli(
+        tmp_path,
+        "run",
+        "未确认执行",
+        "--fake-response",
+        "计划：需要确认。",
+        "--plan-file",
+        str(plan_file),
+        "--apply",
+    )
+
+    assert result.returncode == 2
+    assert "应用执行计划需要确认" in result.stderr
+    assert not (tmp_path / "docs" / "needs-confirmation.md").exists()
