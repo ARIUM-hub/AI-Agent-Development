@@ -35,6 +35,11 @@ def post_json(url, payload):
         return exc.code, exc.headers["Content-Type"], json.loads(exc.read().decode("utf-8"))
 
 
+def get_text(url):
+    with urlopen(url, timeout=5) as response:
+        return response.status, response.headers["Content-Type"], response.read().decode("utf-8")
+
+
 def test_health_route_returns_json(tmp_path) -> None:
     server, base_url = start_server(tmp_path)
     try:
@@ -87,3 +92,35 @@ def test_run_route_rejects_missing_fake_response(tmp_path) -> None:
     assert content_type == "application/json; charset=utf-8"
     assert payload["ok"] is False
     assert "fake_response" in payload["error"]
+
+
+def test_static_index_route_returns_html(tmp_path) -> None:
+    server, base_url = start_server(tmp_path)
+    try:
+        status, content_type, body = get_text(f"{base_url}/")
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert status == HTTPStatus.OK
+    assert content_type == "text/html; charset=utf-8"
+    assert "研发助手控制台" in body
+
+
+def test_static_assets_include_console_interactions(tmp_path) -> None:
+    server, base_url = start_server(tmp_path)
+    try:
+        css_status, css_type, css_body = get_text(f"{base_url}/static/styles.css")
+        js_status, js_type, js_body = get_text(f"{base_url}/static/app.js")
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert css_status == HTTPStatus.OK
+    assert css_type == "text/css; charset=utf-8"
+    assert "--ink" in css_body
+    assert "@media" in css_body
+    assert js_status == HTTPStatus.OK
+    assert js_type == "text/javascript; charset=utf-8"
+    assert "loadContext" in js_body
+    assert "submitRun" in js_body

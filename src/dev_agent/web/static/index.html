@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>研发助手控制台</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero" aria-labelledby="page-title">
+        <p class="eyebrow">Local Dev Agent</p>
+        <h1 id="page-title">研发助手控制台</h1>
+        <p class="lede">在本机查看上下文、历史和 dry-run 计划。默认不触发真实模型请求，也不执行远程 Git 操作。</p>
+      </section>
+      <section class="grid" aria-label="控制台信息">
+        <article class="panel">
+          <h2>环境</h2>
+          <pre id="health">加载中...</pre>
+        </article>
+        <article class="panel">
+          <h2>上下文</h2>
+          <pre id="context">加载中...</pre>
+        </article>
+        <article class="panel">
+          <h2>历史</h2>
+          <pre id="history">加载中...</pre>
+        </article>
+        <article class="panel run-panel">
+          <h2>提交 dry-run</h2>
+          <form id="run-form">
+            <label for="request">任务</label>
+            <textarea id="request" name="request" required>整理当前项目状态，并给出下一步开发计划。</textarea>
+            <label for="fake-response">Fake response</label>
+            <textarea id="fake-response" name="fake_response" required>计划：读取上下文、检查历史、运行测试。</textarea>
+            <button type="submit">生成计划</button>
+          </form>
+          <pre id="run-result" aria-live="polite">等待提交...</pre>
+        </article>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
