@@ -96,7 +96,14 @@
               <p class="eyebrow">运营概览</p>
               <h2>分析记录分布</h2>
             </div>
-            <span class="status">基于全部本地记录</span>
+            <label class="summary-range" for="summary-range">
+              <span>时间范围</span>
+              <select id="summary-range" name="range">
+                <option value="all">全部记录</option>
+                <option value="7d">最近 7 天</option>
+                <option value="30d">最近 30 天</option>
+              </select>
+            </label>
           </div>
           <div id="summary-content" class="summary-loading">概览加载中...</div>
         </section>

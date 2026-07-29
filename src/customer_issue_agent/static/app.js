@@ -34,6 +34,7 @@ document.addEventListener("DOMContentLoaded", () => {
   bindAnalysisForm("upload-form", "upload-error");
   bindBatchForm();
   bindFeedbackForms(document);
+  bindSummaryRange();
   loadRecordsSummary();
   bindFilteredExport();
   bindRecordFilters();
@@ -320,14 +321,29 @@ function rootCauseLabel(value) {
   return rootCauses[value] || value || "未知";
 }
 
+function bindSummaryRange() {
+  const select = document.getElementById("summary-range");
+  if (!select) {
+    return;
+  }
+
+  select.addEventListener("change", () => {
+    loadRecordsSummary();
+  });
+}
+
 async function loadRecordsSummary() {
   const container = document.getElementById("summary-content");
   if (!container) {
     return;
   }
 
+  const range = document.getElementById("summary-range")?.value || "all";
+  const params = new URLSearchParams();
+  params.set("range", range);
+
   try {
-    const response = await fetch("/api/records/summary");
+    const response = await fetch(`/api/records/summary?${params.toString()}`);
     const payload = await response.json();
     if (!response.ok) {
       throw new Error(readError(payload));
@@ -399,11 +415,15 @@ function bindFilteredExport() {
 
 function buildFilteredExportUrl() {
   const params = new URLSearchParams();
+  const summaryRange = document.getElementById("summary-range")?.value || "all";
   const query = document.getElementById("record-search")?.value.trim() || "";
   const issue = document.getElementById("issue-filter")?.value || "";
   const responsibility = document.getElementById("responsibility-filter")?.value || "";
   const feedback = document.getElementById("feedback-filter")?.value || "";
 
+  if (summaryRange !== "all") {
+    params.set("range", summaryRange);
+  }
   if (query) {
     params.set("q", query);
   }

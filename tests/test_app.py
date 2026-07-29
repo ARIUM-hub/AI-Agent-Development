@@ -588,3 +588,31 @@ def test_export_records_csv_endpoint_filters_by_time_range_and_query(tmp_path):
     assert "recent-amazon" in text
     assert "recent-tiktok" not in text
     assert "old-amazon" not in text
+
+
+def test_index_contains_summary_range_selector(tmp_path):
+    app = create_app(storage_path=tmp_path / "analyses.jsonl")
+    client = TestClient(app)
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    html = response.text
+    assert 'id="summary-range"' in html
+    assert 'value="7d"' in html
+    assert 'value="30d"' in html
+    assert "最近 7 天" in html
+
+
+def test_static_app_js_contains_summary_range_hooks(tmp_path):
+    app = create_app(storage_path=tmp_path / "analyses.jsonl")
+    client = TestClient(app)
+
+    response = client.get("/static/app.js")
+
+    assert response.status_code == 200
+    script = response.text
+    assert "bindSummaryRange" in script
+    assert "summary-range" in script
+    assert 'params.set("range", range)' in script
+    assert 'params.set("range", summaryRange)' in script
