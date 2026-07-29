@@ -1,3 +1,6 @@
+import json
+from datetime import UTC, datetime, timedelta
+
 from fastapi.testclient import TestClient
 
 from customer_issue_agent import __version__
@@ -513,3 +516,75 @@ def test_static_app_js_contains_filtered_export_hooks(tmp_path):
     assert "buildFilteredExportUrl" in script
     assert "data-filter-export" in script
     assert "feedback_status" in script
+
+
+def _stored_record(record_id: str, *, platform: str, created_at: datetime, issue_category: str = "function_use") -> dict:
+    return {
+        "id": record_id,
+        "created_at": created_at.isoformat(),
+        "analysis": {
+            "request": {"platform": platform, "conversation_text": "Customer: not working"},
+            "attribution": {
+                "customer_problem": f"{platform} 客户反馈无法使用",
+                "issue_category": issue_category,
+                "root_causes": ["unclear_instructions"],
+                "primary_responsibility": "customer_service_training",
+                "evidence_strength": "likely",
+                "recommended_actions": ["补问设备型号"],
+                "missing_information": ["错误提示截图"],
+            },
+            "report": f"{platform} 客户反馈无法使用",
+        },
+        "feedback": None,
+    }
+
+
+def _write_jsonl_records(path, records):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="\n") as handle:
+        for record in records:
+            handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def test_records_summary_endpoint_filters_by_time_range(tmp_path):
+    storage_path = tmp_path / "analyses.jsonl"
+    now = datetime.now(UTC)
+    _write_jsonl_records(
+        storage_path,
+        [
+            _stored_record("recent", platform="Amazon", created_at=now - timedelta(days=2)),
+            _stored_record("old", platform="TikTok Shop", created_at=now - timedelta(days=40)),
+        ],
+    )
+    app = create_app(storage_path=storage_path)
+    client = TestClient(app)
+
+    response = client.get("/api/records/summary", params={"range": "7d"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total_records"] == 1
+    assert payload["issue_categories"] == [{"value": "function_use", "count": 1}]
+
+
+def test_export_records_csv_endpoint_filters_by_time_range_and_query(tmp_path):
+    storage_path = tmp_path / "analyses.jsonl"
+    now = datetime.now(UTC)
+    _write_jsonl_records(
+        storage_path,
+        [
+            _stored_record("recent-amazon", platform="Amazon", created_at=now - timedelta(days=2)),
+            _stored_record("recent-tiktok", platform="TikTok Shop", created_at=now - timedelta(days=2)),
+            _stored_record("old-amazon", platform="Amazon", created_at=now - timedelta(days=40)),
+        ],
+    )
+    app = create_app(storage_path=storage_path)
+    client = TestClient(app)
+
+    response = client.get("/api/records/export.csv", params={"range": "30d", "platform": "amazon"})
+
+    assert response.status_code == 200
+    text = response.content.decode("utf-8-sig")
+    assert "recent-amazon" in text
+    assert "recent-tiktok" not in text
+    assert "old-amazon" not in text

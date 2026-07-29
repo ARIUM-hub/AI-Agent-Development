@@ -104,6 +104,7 @@ def create_app(storage_path: Path | None = None) -> FastAPI:
         responsibility: str = "",
         feedback_status: str = "",
         q: str = "",
+        range: str = "all",
     ) -> Response:
         records = filter_records(
             store.list_records(),
@@ -112,6 +113,7 @@ def create_app(storage_path: Path | None = None) -> FastAPI:
             responsibility=responsibility,
             feedback_status=feedback_status,
             q=q,
+            range=range,
         )
         return Response(
             content=build_records_csv(records),
@@ -120,8 +122,8 @@ def create_app(storage_path: Path | None = None) -> FastAPI:
         )
 
     @app.get("/api/records/summary")
-    async def records_summary() -> dict:
-        return build_records_summary(store.list_records())
+    async def records_summary(range: str = "all") -> dict:
+        return build_records_summary(filter_records(store.list_records(), range=range))
 
     return app
 
