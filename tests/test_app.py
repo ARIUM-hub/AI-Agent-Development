@@ -119,3 +119,18 @@ def test_index_contains_tabs_forms_result_region_and_script(tmp_path):
     assert 'id="recent-records"' in html
     assert 'role="alert"' in html
     assert '<script src="/static/app.js" defer></script>' in html
+
+
+def test_static_app_js_contains_progressive_enhancement_hooks(tmp_path):
+    app = create_app(storage_path=tmp_path / "analyses.jsonl")
+    client = TestClient(app)
+
+    response = client.get("/static/app.js")
+
+    assert response.status_code == 200
+    script = response.text
+    assert "bindTabs" in script
+    assert "submitAnalysisForm" in script
+    assert "renderAnalysisResult" in script
+    assert "prependRecentRecord" in script
+    assert "fetch(form.dataset.endpoint" in script
