@@ -31,6 +31,13 @@ def test_doctor_outputs_json(tmp_path: Path) -> None:
     payload = json.loads(result.stdout)
     assert payload["ok"] is True
     assert payload["encoding"] == "utf-8"
+    assert payload["capabilities"] == {
+        "provider_interface": True,
+        "budget_protection": True,
+        "command_executor": True,
+        "git_reader": True,
+        "verification_runner": True,
+    }
 
 
 def test_scan_outputs_project_languages(tmp_path: Path) -> None:
