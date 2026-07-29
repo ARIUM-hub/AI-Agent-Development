@@ -1,7 +1,13 @@
 from pathlib import Path
 
 from dev_agent.encoding import UTF8, read_text_utf8, write_text_utf8
-from dev_agent.execution.models import ExecutionChange, ExecutionPlan, ExecutionResult
+from dev_agent.execution.models import (
+    ExecutionChange,
+    ExecutionOperation,
+    ExecutionPlan,
+    ExecutionPreviewChange,
+    ExecutionResult,
+)
 from dev_agent.execution.plan import ExecutionPlanError
 from dev_agent.tools.git import GitReader
 
@@ -22,6 +28,7 @@ class ExecutionPlanApplier:
         return ExecutionResult(
             applied=False,
             planned_changes=self.planned_changes(plan),
+            preview_changes=self._preview_changes(plan),
         )
 
     def apply(self, plan: ExecutionPlan) -> ExecutionResult:
@@ -76,12 +83,48 @@ class ExecutionPlanApplier:
         return target
 
     def _validate_operations(self, plan: ExecutionPlan) -> None:
-        created_targets: set[Path] = set()
+        planned_files: set[Path] = set()
         for operation in plan.operations:
             if operation.action not in SUPPORTED_ACTIONS:
                 raise ExecutionPlanError(f"unsupported action: {operation.action}")
             target = self._resolve_target(operation.path)
+            self._validate_parent_directories(target, planned_files)
+            if target.exists() and target.is_dir():
+                raise ExecutionPlanError(f"path is a directory: {operation.path}")
             if operation.action == "create_text":
-                if target.exists() or target in created_targets:
+                if target.exists() or target in planned_files:
                     raise ExecutionPlanError(f"path already exists: {operation.path}")
-                created_targets.add(target)
+            planned_files.add(target)
+
+    def _validate_parent_directories(self, target: Path, planned_files: set[Path]) -> None:
+        repo_root = self.repo_root.resolve()
+        for parent in target.parents:
+            if parent == repo_root:
+                return
+            if parent.exists() and not parent.is_dir():
+                raise ExecutionPlanError(f"parent path is not a directory: {parent.relative_to(repo_root)}")
+            if parent in planned_files:
+                raise ExecutionPlanError(f"parent path is not a directory: {parent.relative_to(repo_root)}")
+
+    def _preview_changes(self, plan: ExecutionPlan) -> list[ExecutionPreviewChange]:
+        self._validate_operations(plan)
+        return [
+            ExecutionPreviewChange(
+                action=operation.action,
+                path=operation.path,
+                exists=self._resolve_target(operation.path).exists(),
+                content_bytes=len(operation.content.encode(UTF8)),
+                risk=self._risk_for_operation(operation),
+            )
+            for operation in plan.operations
+        ]
+
+    def _risk_for_operation(self, operation: ExecutionOperation) -> str:
+        if operation.action == "create_text":
+            return "create"
+        if operation.action == "overwrite_text":
+            return "overwrite"
+        if operation.action == "append_text":
+            target = self._resolve_target(operation.path)
+            return "append" if target.exists() else "append_create"
+        raise ExecutionPlanError(f"unsupported action: {operation.action}")

@@ -152,6 +152,7 @@ def test_run_applies_plan_file_and_reports_changes(tmp_path: Path) -> None:
         "--plan-file",
         str(plan_file),
         "--apply",
+        "--yes",
     )
 
     assert result.returncode == 0
@@ -193,8 +194,58 @@ def test_run_previews_plan_file_without_apply(tmp_path: Path) -> None:
     assert result.returncode == 0
     payload = json.loads(result.stdout)
     assert payload["planned_changes"][0]["path"] == "docs/preview.md"
+    assert payload["preview_changes"][0]["risk"] == "create"
+    assert payload["preview_changes"][0]["content_bytes"] == len("只预览\n".encode("utf-8"))
     assert payload["applied_changes"] == []
+    assert not (tmp_path / ".agent").exists()
     assert not (tmp_path / "docs" / "preview.md").exists()
+
+
+def test_run_preview_outputs_preview_changes_without_writing(tmp_path: Path) -> None:
+    write_target = tmp_path / "docs" / "preview.md"
+    plan_file = tmp_path / "plan.json"
+    plan_file.write_text(
+        json.dumps(
+            {
+                "summary": "预览说明",
+                "operations": [
+                    {
+                        "action": "create_text",
+                        "path": "docs/preview.md",
+                        "content": "预览中文\n",
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_cli(
+        tmp_path,
+        "run",
+        "预览计划",
+        "--fake-response",
+        "计划：只预览。",
+        "--plan-file",
+        str(plan_file),
+        "--preview",
+    )
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["preview_changes"] == [
+        {
+            "action": "create_text",
+            "path": "docs/preview.md",
+            "exists": False,
+            "content_bytes": len("预览中文\n".encode("utf-8")),
+            "risk": "create",
+        }
+    ]
+    assert payload["applied_changes"] == []
+    assert not (tmp_path / ".agent").exists()
+    assert not write_target.exists()
 
 
 def test_run_accepts_plan_file_with_utf8_bom(tmp_path: Path) -> None:
@@ -261,3 +312,74 @@ def test_run_reports_missing_plan_file_as_cli_error(tmp_path: Path) -> None:
 
     assert result.returncode == 2
     assert "无法读取执行计划" in result.stderr
+
+
+def test_run_apply_without_confirmation_rejects_and_does_not_write(tmp_path: Path) -> None:
+    plan_file = tmp_path / "plan.json"
+    plan_file.write_text(
+        json.dumps(
+            {
+                "summary": "需要确认",
+                "operations": [
+                    {
+                        "action": "create_text",
+                        "path": "docs/needs-confirmation.md",
+                        "content": "不应写入\n",
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_cli(
+        tmp_path,
+        "run",
+        "未确认执行",
+        "--fake-response",
+        "计划：需要确认。",
+        "--plan-file",
+        str(plan_file),
+        "--apply",
+    )
+
+    assert result.returncode == 2
+    assert "应用执行计划需要确认" in result.stderr
+    assert not (tmp_path / "docs" / "needs-confirmation.md").exists()
+
+
+def test_run_preview_rejects_create_conflict_without_writing(tmp_path: Path) -> None:
+    (tmp_path / "README.md").write_text("# existing\n", encoding="utf-8")
+    plan_file = tmp_path / "plan.json"
+    plan_file.write_text(
+        json.dumps(
+            {
+                "summary": "冲突预览",
+                "operations": [
+                    {
+                        "action": "create_text",
+                        "path": "README.md",
+                        "content": "# new\n",
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_cli(
+        tmp_path,
+        "run",
+        "预览冲突",
+        "--fake-response",
+        "计划：冲突。",
+        "--plan-file",
+        str(plan_file),
+        "--preview",
+    )
+
+    assert result.returncode == 2
+    assert "执行计划预览失败" in result.stderr
+    assert (tmp_path / "README.md").read_text(encoding="utf-8") == "# existing\n"

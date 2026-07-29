@@ -5,6 +5,7 @@ import sys
 
 from dev_agent import __version__
 from dev_agent.encoding import UTF8, read_text_utf8, utf8_environment_hint, write_text_utf8
+from dev_agent.execution.applier import ExecutionPlanApplier
 from dev_agent.execution.plan import ExecutionPlanError, parse_execution_plan
 from dev_agent.memory.retriever import MemoryRetriever
 from dev_agent.memory.store import MemoryStore
@@ -97,6 +98,42 @@ def _load_execution_plan(path: str | None):
         raise ValueError(f"无法读取执行计划：{exc}") from exc
 
 
+def _preview_execution_plan(execution_plan):
+    if execution_plan is None:
+        return []
+    return ExecutionPlanApplier(Path.cwd()).preview(execution_plan).preview_changes_as_dicts()
+
+
+def _preview_payload(args: Namespace, execution_plan, preview_changes: list[dict[str, object]]) -> dict[str, object]:
+    planned_changes = [] if execution_plan is None else [operation.to_dict() for operation in execution_plan.operations]
+    return {
+        "task_id": None,
+        "plan_text": args.fake_response,
+        "dry_run": True,
+        "memory_hit_count": 0,
+        "verification_steps": [],
+        "verification_passed": None,
+        "events": ["execution_previewed"],
+        "planned_changes": planned_changes,
+        "preview_changes": preview_changes,
+        "applied_changes": [],
+        "diff_stat": "",
+        "execution_error": None,
+    }
+
+
+def _confirm_apply(args: Namespace) -> bool:
+    if not args.apply:
+        return True
+    if args.yes:
+        return True
+    if not sys.stdin.isatty():
+        return False
+    sys.stderr.write("应用执行计划需要确认。输入 yes 继续：")
+    answer = sys.stdin.readline().strip()
+    return answer == "yes"
+
+
 def run_command(args: Namespace) -> int:
     if args.apply and args.plan_file is None:
         sys.stderr.write("--plan-file is required when --apply is used\n")
@@ -105,6 +142,17 @@ def run_command(args: Namespace) -> int:
         execution_plan = _load_execution_plan(args.plan_file)
     except ValueError as exc:
         sys.stderr.write(str(exc) + "\n")
+        return 2
+    try:
+        preview_changes = _preview_execution_plan(execution_plan)
+    except ExecutionPlanError as exc:
+        sys.stderr.write(f"执行计划预览失败：{exc}\n")
+        return 2
+    if execution_plan is not None and not args.apply:
+        sys.stdout.write(_json(_preview_payload(args, execution_plan, preview_changes)))
+        return 0
+    if not _confirm_apply(args):
+        sys.stderr.write("应用执行计划需要确认；请传入 --yes 或在交互式终端输入 yes。\n")
         return 2
     runner = LocalTaskRunner(
         repo_root=Path.cwd(),
@@ -129,6 +177,7 @@ def run_command(args: Namespace) -> int:
         "verification_passed": None if result.verification_result is None else result.verification_result.passed,
         "events": result.events,
         "planned_changes": result.planned_changes,
+        "preview_changes": preview_changes,
         "applied_changes": result.applied_changes,
         "diff_stat": result.diff_stat,
         "execution_error": result.execution_error,
@@ -188,7 +237,9 @@ def build_parser() -> ArgumentParser:
     run_parser.add_argument("--dry-run", action="store_true", default=True)
     run_parser.add_argument("--verify", action="store_true")
     run_parser.add_argument("--plan-file")
+    run_parser.add_argument("--preview", action="store_true")
     run_parser.add_argument("--apply", action="store_true")
+    run_parser.add_argument("--yes", action="store_true")
     run_parser.set_defaults(handler=run_command)
 
     serve_parser = subparsers.add_parser("serve")

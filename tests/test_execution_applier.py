@@ -77,3 +77,104 @@ def test_applier_validates_all_operations_before_writing(tmp_path) -> None:
 
     assert not (tmp_path / "docs" / "first.md").exists()
     assert read_text_utf8(tmp_path / "README.md") == "# existing\n"
+
+
+def test_applier_preview_reports_target_state_bytes_and_risk(tmp_path) -> None:
+    write_text_utf8(tmp_path / "existing.md", "旧内容\n")
+    plan = ExecutionPlan(
+        summary="预览",
+        operations=[
+            ExecutionOperation("create_text", "docs/new.md", "# 新文件\n"),
+            ExecutionOperation("overwrite_text", "existing.md", "新内容\n"),
+            ExecutionOperation("append_text", "logs/new.md", "追加\n"),
+            ExecutionOperation("append_text", "existing.md", "继续追加\n"),
+        ],
+    )
+
+    result = ExecutionPlanApplier(tmp_path).preview(plan)
+
+    assert result.applied is False
+    assert result.preview_changes_as_dicts() == [
+        {
+            "action": "create_text",
+            "path": "docs/new.md",
+            "exists": False,
+            "content_bytes": len("# 新文件\n".encode("utf-8")),
+            "risk": "create",
+        },
+        {
+            "action": "overwrite_text",
+            "path": "existing.md",
+            "exists": True,
+            "content_bytes": len("新内容\n".encode("utf-8")),
+            "risk": "overwrite",
+        },
+        {
+            "action": "append_text",
+            "path": "logs/new.md",
+            "exists": False,
+            "content_bytes": len("追加\n".encode("utf-8")),
+            "risk": "append_create",
+        },
+        {
+            "action": "append_text",
+            "path": "existing.md",
+            "exists": True,
+            "content_bytes": len("继续追加\n".encode("utf-8")),
+            "risk": "append",
+        },
+    ]
+    assert not (tmp_path / "docs" / "new.md").exists()
+    assert read_text_utf8(tmp_path / "existing.md") == "旧内容\n"
+
+
+def test_applier_preview_rejects_create_conflict_without_writing(tmp_path) -> None:
+    write_text_utf8(tmp_path / "README.md", "# existing\n")
+    plan = ExecutionPlan(
+        summary="冲突",
+        operations=[
+            ExecutionOperation("create_text", "docs/first.md", "first\n"),
+            ExecutionOperation("create_text", "README.md", "# new\n"),
+        ],
+    )
+
+    with pytest.raises(ExecutionPlanError, match="already exists"):
+        ExecutionPlanApplier(tmp_path).preview(plan)
+
+    assert not (tmp_path / "docs" / "first.md").exists()
+    assert read_text_utf8(tmp_path / "README.md") == "# existing\n"
+
+
+@pytest.mark.parametrize("first_action", ["overwrite_text", "append_text"])
+def test_applier_rejects_create_after_planned_write_creates_same_target(tmp_path, first_action: str) -> None:
+    plan = ExecutionPlan(
+        summary="计划内目标冲突",
+        operations=[
+            ExecutionOperation(first_action, "docs/same.md", "first\n"),
+            ExecutionOperation("create_text", "docs/same.md", "second\n"),
+        ],
+    )
+
+    with pytest.raises(ExecutionPlanError, match="already exists"):
+        ExecutionPlanApplier(tmp_path).preview(plan)
+    with pytest.raises(ExecutionPlanError, match="already exists"):
+        ExecutionPlanApplier(tmp_path).apply(plan)
+
+    assert not (tmp_path / "docs" / "same.md").exists()
+
+
+def test_applier_rejects_parent_path_that_is_file_before_writing(tmp_path) -> None:
+    write_text_utf8(tmp_path / "blocker", "not a directory\n")
+    plan = ExecutionPlan(
+        summary="父路径冲突",
+        operations=[
+            ExecutionOperation("create_text", "docs/first.md", "first\n"),
+            ExecutionOperation("create_text", "blocker/child.md", "child\n"),
+        ],
+    )
+
+    with pytest.raises(ExecutionPlanError, match="parent path is not a directory"):
+        ExecutionPlanApplier(tmp_path).apply(plan)
+
+    assert not (tmp_path / "docs" / "first.md").exists()
+    assert read_text_utf8(tmp_path / "blocker") == "not a directory\n"
