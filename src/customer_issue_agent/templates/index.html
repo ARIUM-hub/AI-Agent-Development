@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>客户使用问题归因智能体</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="workbench">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">海外电商 · 客服会话分析</p>
+            <h1>客户使用问题归因智能体</h1>
+          </div>
+          <span class="status">本地规则模式</span>
+        </header>
+
+        <form class="panel" method="post" action="/api/analyze">
+          <label for="platform">平台来源</label>
+          <input id="platform" name="platform" value="Other overseas platform">
+
+          <label for="conversation_text">客服会话</label>
+          <textarea id="conversation_text" name="conversation_text" rows="12" placeholder="Customer: I followed the instructions but it still will not connect.&#10;Agent: Please try again later."></textarea>
+
+          <button type="submit">分析会话</button>
+        </form>
+
+        <section class="history" aria-label="最近分析记录">
+          <h2>最近记录</h2>
+          {% if records %}
+            {% for record in records|reverse %}
+              <article class="record">
+                <strong>{{ record.analysis.request.platform }}</strong>
+                <p>{{ record.analysis.report }}</p>
+              </article>
+            {% endfor %}
+          {% else %}
+            <p class="empty">还没有分析记录。</p>
+          {% endif %}
+        </section>
+      </section>
+    </main>
+  </body>
+</html>

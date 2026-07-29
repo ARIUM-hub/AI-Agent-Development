@@ -37,3 +37,14 @@ def test_analyze_rejects_empty_text(tmp_path):
     response = client.post("/api/analyze", data={"platform": "Other", "conversation_text": "   "})
 
     assert response.status_code == 422
+
+
+def test_index_renders_workbench(tmp_path):
+    app = create_app(storage_path=tmp_path / "analyses.jsonl")
+    client = TestClient(app)
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "客户使用问题归因智能体" in response.text
+    assert "conversation_text" in response.text

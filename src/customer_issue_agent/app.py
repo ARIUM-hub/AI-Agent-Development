@@ -29,7 +29,7 @@ def create_app(storage_path: Path | None = None) -> FastAPI:
 
     @app.get("/", response_class=HTMLResponse)
     async def index(request: Request) -> HTMLResponse:
-        return templates.TemplateResponse("index.html", {"request": request, "records": store.list_records()[-10:]})
+        return templates.TemplateResponse(request, "index.html", {"records": store.list_records()[-10:]})
 
     @app.post("/api/analyze")
     async def analyze_text(
