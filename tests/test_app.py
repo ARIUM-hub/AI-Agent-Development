@@ -241,3 +241,55 @@ def test_static_app_js_contains_batch_and_feedback_hooks(tmp_path):
     assert "renderBatchResults" in script
     assert "bindFeedbackForms" in script
     assert "submitFeedbackForm" in script
+
+
+def test_export_records_csv_endpoint_returns_bom_csv_with_feedback(tmp_path):
+    app = create_app(storage_path=tmp_path / "analyses.jsonl")
+    client = TestClient(app)
+    analysis_response = client.post(
+        "/api/analyze",
+        data={"platform": "Amazon", "conversation_text": "Customer: not working"},
+    )
+    record_id = analysis_response.json()["record_id"]
+    client.post(
+        f"/api/records/{record_id}/feedback",
+        data={
+            "accepted": "false",
+            "corrected_issue_category": "product_fault",
+            "corrected_responsibility": "supply_chain_quality",
+            "note": "需要质量团队复核。",
+        },
+    )
+
+    response = client.get("/api/records/export.csv")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    assert "customer-issue-records.csv" in response.headers["content-disposition"]
+    assert response.content.startswith(b"\xef\xbb\xbf")
+    text = response.content.decode("utf-8-sig")
+    assert "记录 ID,创建时间,平台" in text
+    assert "Amazon" in text
+    assert "需要质量团队复核。" in text
+
+
+def test_export_records_csv_endpoint_returns_header_when_empty(tmp_path):
+    app = create_app(storage_path=tmp_path / "analyses.jsonl")
+    client = TestClient(app)
+
+    response = client.get("/api/records/export.csv")
+
+    assert response.status_code == 200
+    text = response.content.decode("utf-8-sig")
+    assert text.startswith("记录 ID,创建时间,平台")
+
+
+def test_index_contains_export_csv_link(tmp_path):
+    app = create_app(storage_path=tmp_path / "analyses.jsonl")
+    client = TestClient(app)
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert 'href="/api/records/export.csv"' in response.text
+    assert "导出 CSV" in response.text

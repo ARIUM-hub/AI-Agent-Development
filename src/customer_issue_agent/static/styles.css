@@ -216,6 +216,26 @@ textarea {
   opacity: 0.68;
 }
 
+.secondary-action {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.74);
+  color: var(--accent-strong);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.secondary-action:hover,
+.secondary-action:focus-visible {
+  border-color: var(--accent);
+  background: rgba(15, 118, 110, 0.1);
+}
+
 button:focus-visible,
 input:focus-visible,
 textarea:focus-visible {

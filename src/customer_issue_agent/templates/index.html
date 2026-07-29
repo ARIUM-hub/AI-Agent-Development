@@ -92,8 +92,11 @@
 
         <section class="history" aria-label="最近分析记录">
           <div class="section-heading">
-            <h2>最近记录</h2>
-            <span>{{ records|length }} 条</span>
+            <div>
+              <h2>最近记录</h2>
+              <span>{{ records|length }} 条</span>
+            </div>
+            <a class="secondary-action" href="/api/records/export.csv">导出 CSV</a>
           </div>
           <div id="recent-records" class="record-list">
             {% if records %}

@@ -4,13 +4,14 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import FastAPI, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
 from customer_issue_agent.attribution import analyze_attribution
 from customer_issue_agent.domain import AnalysisRequest, AnalysisResult
+from customer_issue_agent.export import build_records_csv
 from customer_issue_agent.ingestion import extract_batch_conversation_texts, extract_conversation_text
 from customer_issue_agent.parser import parse_conversation
 from customer_issue_agent.report import build_report
@@ -93,6 +94,14 @@ def create_app(storage_path: Path | None = None) -> FastAPI:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="记录不存在或已被清理，请刷新页面后重试") from exc
         return {"record_id": record_id, "feedback": feedback}
+
+    @app.get("/api/records/export.csv")
+    async def export_records_csv() -> Response:
+        return Response(
+            content=build_records_csv(store.list_records()),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": "attachment; filename=customer-issue-records.csv"},
+        )
 
     return app
 
