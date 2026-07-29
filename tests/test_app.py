@@ -212,3 +212,32 @@ def test_feedback_endpoint_returns_404_for_missing_record(tmp_path):
     response = client.post("/api/records/missing/feedback", data={"accepted": "true"})
 
     assert response.status_code == 404
+
+
+def test_index_contains_batch_upload_and_feedback_controls(tmp_path):
+    app = create_app(storage_path=tmp_path / "analyses.jsonl")
+    client = TestClient(app)
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    html = response.text
+    assert 'data-tab-target="batch-panel"' in html
+    assert 'id="batch-form"' in html
+    assert 'data-endpoint="/api/analyze-batch-file"' in html
+    assert 'id="batch-results"' in html
+    assert 'data-feedback-template' in html
+
+
+def test_static_app_js_contains_batch_and_feedback_hooks(tmp_path):
+    app = create_app(storage_path=tmp_path / "analyses.jsonl")
+    client = TestClient(app)
+
+    response = client.get("/static/app.js")
+
+    assert response.status_code == 200
+    script = response.text
+    assert "submitBatchForm" in script
+    assert "renderBatchResults" in script
+    assert "bindFeedbackForms" in script
+    assert "submitFeedbackForm" in script

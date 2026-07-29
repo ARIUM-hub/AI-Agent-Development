@@ -174,7 +174,8 @@ label {
 }
 
 input,
-textarea {
+textarea,
+select {
   width: 100%;
   min-height: 44px;
   border: 1px solid var(--line);
@@ -237,6 +238,10 @@ textarea:focus-visible {
   min-height: 420px;
 }
 
+.result-stack {
+  min-width: 0;
+}
+
 .result-empty {
   display: grid;
   min-height: 330px;
@@ -289,6 +294,55 @@ textarea:focus-visible {
 .record-meta {
   flex-wrap: wrap;
   justify-content: flex-start;
+}
+
+.batch-results:empty {
+  display: none;
+}
+
+.batch-results {
+  margin-top: 16px;
+}
+
+.batch-list {
+  display: grid;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.result-record {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.feedback-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  white-space: normal;
+}
+
+.feedback-form label {
+  margin-bottom: 0;
+}
+
+.feedback-form textarea {
+  min-height: 84px;
+}
+
+.feedback-pill {
+  border-color: rgba(15, 118, 110, 0.22);
+  background: rgba(15, 118, 110, 0.12);
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.form-message.is-success {
+  color: var(--accent-strong);
 }
 
 @media (max-width: 900px) {

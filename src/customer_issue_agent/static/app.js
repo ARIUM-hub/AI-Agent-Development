@@ -27,6 +27,8 @@ document.addEventListener("DOMContentLoaded", () => {
   bindTabs();
   bindAnalysisForm("paste-form", "paste-error");
   bindAnalysisForm("upload-form", "upload-error");
+  bindBatchForm();
+  bindFeedbackForms(document);
 });
 
 function bindTabs() {
@@ -34,6 +36,7 @@ function bindTabs() {
   const forms = {
     "paste-panel": document.getElementById("paste-form"),
     "upload-panel": document.getElementById("upload-form"),
+    "batch-panel": document.getElementById("batch-form"),
   };
 
   tabs.forEach((tab) => {
@@ -48,6 +51,9 @@ function bindTabs() {
       Object.entries(forms).forEach(([panelId, form]) => {
         const panel = document.getElementById(panelId);
         const active = panelId === target;
+        if (!form || !panel) {
+          return;
+        }
         form.classList.toggle("is-hidden", !active);
         panel.hidden = !active;
       });
@@ -67,6 +73,18 @@ function bindAnalysisForm(formId, errorId) {
   });
 }
 
+function bindBatchForm() {
+  const form = document.getElementById("batch-form");
+  if (!form) {
+    return;
+  }
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    submitBatchForm(form, document.getElementById("batch-error"));
+  });
+}
+
 async function submitAnalysisForm(form, errorBox) {
   const button = form.querySelector("button[type='submit']");
   const originalLabel = button.textContent;
@@ -83,6 +101,7 @@ async function submitAnalysisForm(form, errorBox) {
       throw new Error(readError(payload));
     }
     renderAnalysisResult(payload);
+    bindFeedbackForms(document.getElementById("analysis-result"));
     prependRecentRecord(payload);
     form.reset();
   } catch (error) {
@@ -118,6 +137,118 @@ function renderAnalysisResult(payload) {
       ${resultCard("需要补充", attribution.missing_information.join("；") || "暂无必须补充的信息。")}
     </div>
   `;
+  result.appendChild(createFeedbackForm(payload.record_id));
+}
+
+async function submitBatchForm(form, errorBox) {
+  const button = form.querySelector("button[type='submit']");
+  const originalLabel = button.textContent;
+  clearError(errorBox);
+  setLoading(button, true);
+
+  try {
+    const response = await fetch(form.dataset.endpoint, {
+      method: "POST",
+      body: new FormData(form),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(readError(payload));
+    }
+    renderBatchResults(payload);
+    payload.records.forEach((record) => prependRecentRecord(record));
+    form.reset();
+  } catch (error) {
+    showError(errorBox, error.message || "批量分析失败，请检查文件后重试。");
+  } finally {
+    button.textContent = originalLabel;
+    setLoading(button, false);
+  }
+}
+
+function renderBatchResults(payload) {
+  const container = document.getElementById("batch-results");
+  container.innerHTML = `
+    <div class="result-header">
+      <div>
+        <p class="eyebrow">批量分析完成</p>
+        <h2>${payload.count} 条会话已生成分析</h2>
+      </div>
+      <span class="record-id">批次 #${escapeHtml(payload.batch_id.slice(0, 8))}</span>
+    </div>
+    <div class="batch-list"></div>
+  `;
+  const list = container.querySelector(".batch-list");
+  payload.records.forEach((record) => {
+    list.appendChild(buildRecordCard(record));
+  });
+  bindFeedbackForms(container);
+}
+
+function buildRecordCard(payload) {
+  const analysis = payload.analysis;
+  const attribution = analysis.attribution;
+  const article = document.createElement("article");
+  article.className = "record result-record";
+  article.dataset.recordId = payload.record_id;
+  article.innerHTML = `
+    <div class="record-meta">
+      <strong>${escapeHtml(analysis.request.platform)}</strong>
+      <span>${labelFor("issue_category", attribution.issue_category)}</span>
+      <span>${labelFor("responsibility", attribution.primary_responsibility)}</span>
+      <span>${labelFor("evidence", attribution.evidence_strength)}</span>
+    </div>
+    <p>${escapeHtml(analysis.report)}</p>
+  `;
+  article.appendChild(createFeedbackForm(payload.record_id));
+  return article;
+}
+
+function createFeedbackForm(recordId) {
+  const template = document.querySelector("[data-feedback-template]");
+  const fragment = template.content.cloneNode(true);
+  const form = fragment.querySelector("form");
+  form.dataset.endpoint = `/api/records/${recordId}/feedback`;
+  return fragment;
+}
+
+function bindFeedbackForms(root) {
+  root.querySelectorAll(".feedback-form").forEach((form) => {
+    if (form.dataset.bound === "true") {
+      return;
+    }
+    form.dataset.bound = "true";
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      submitFeedbackForm(form);
+    });
+  });
+}
+
+async function submitFeedbackForm(form) {
+  const button = form.querySelector("button[type='submit']");
+  const message = form.querySelector(".form-message");
+  const originalLabel = button.textContent;
+  clearError(message);
+  setLoading(button, true);
+
+  try {
+    const response = await fetch(form.dataset.endpoint, {
+      method: "POST",
+      body: new FormData(form),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(readError(payload));
+    }
+    message.textContent = payload.feedback.accepted ? "已保存：认可系统判断。" : "已保存：人工修正已记录。";
+    message.classList.add("is-visible", "is-success");
+  } catch (error) {
+    showError(message, error.message || "反馈保存失败，请稍后重试。");
+  } finally {
+    button.textContent = originalLabel;
+    setLoading(button, false);
+  }
 }
 
 function prependRecentRecord(payload) {
