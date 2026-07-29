@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 from customer_issue_agent.record_filters import filter_records
 
 
@@ -79,3 +81,48 @@ def test_filter_records_unknown_feedback_status_matches_nothing():
     records = [_record("one"), _record("two", feedback={"accepted": True})]
 
     assert filter_records(records, feedback_status="archived") == []
+
+
+def test_filter_records_matches_recent_7_day_range():
+    now = datetime(2026, 7, 29, 12, 0, tzinfo=UTC)
+    records = [
+        {**_record("recent"), "created_at": "2026-07-25T12:00:00+00:00"},
+        {**_record("old"), "created_at": "2026-07-10T12:00:00+00:00"},
+    ]
+
+    filtered = filter_records(records, range="7d", now=now)
+
+    assert [record["id"] for record in filtered] == ["recent"]
+
+
+def test_filter_records_matches_recent_30_day_range():
+    now = datetime(2026, 7, 29, 12, 0, tzinfo=UTC)
+    records = [
+        {**_record("recent"), "created_at": "2026-07-01T12:00:00+00:00"},
+        {**_record("old"), "created_at": "2026-06-01T12:00:00+00:00"},
+    ]
+
+    filtered = filter_records(records, range="30d", now=now)
+
+    assert [record["id"] for record in filtered] == ["recent"]
+
+
+def test_filter_records_all_and_unknown_range_keep_existing_behavior():
+    now = datetime(2026, 7, 29, 12, 0, tzinfo=UTC)
+    records = [
+        {**_record("missing-created-at")},
+        {**_record("invalid-created-at"), "created_at": "not-a-date"},
+    ]
+
+    assert filter_records(records, range="all", now=now) == records
+    assert filter_records(records, range="custom", now=now) == records
+
+
+def test_filter_records_active_range_excludes_missing_or_invalid_created_at():
+    now = datetime(2026, 7, 29, 12, 0, tzinfo=UTC)
+    records = [
+        {**_record("missing-created-at")},
+        {**_record("invalid-created-at"), "created_at": "not-a-date"},
+    ]
+
+    assert filter_records(records, range="7d", now=now) == []
