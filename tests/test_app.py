@@ -672,3 +672,28 @@ def test_styles_cover_record_detail_components(tmp_path):
     assert ".record-detail" in css
     assert ".record-detail-grid" in css
     assert ".record-detail-grid dt" in css
+
+
+def test_index_contains_platform_presets_for_all_platform_inputs(tmp_path):
+    app = create_app(storage_path=tmp_path / "analyses.jsonl")
+    client = TestClient(app)
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    html = response.text
+    assert 'id="platform-presets"' in html
+    assert 'id="paste-platform" name="platform" list="platform-presets"' in html
+    assert 'id="upload-platform" name="platform" list="platform-presets"' in html
+    assert 'id="batch-platform" name="platform" list="platform-presets"' in html
+    assert 'value="Amazon"' in html
+    assert 'value="TikTok Shop"' in html
+    assert 'value="Shopee"' in html
+    assert 'value="Walmart Marketplace"' in html
+    assert 'value="eBay"' in html
+    assert 'value="Shopify"' in html
+    assert 'value="AliExpress"' in html
+    assert 'value="Lazada"' in html
+    assert 'value="Temu"' in html
+    assert 'value="Shein"' in html
+    assert 'value="Other overseas platform"' in html

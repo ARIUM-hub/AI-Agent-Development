@@ -30,7 +30,7 @@
             <form id="paste-form" class="panel input-panel" method="post" action="/api/analyze" data-endpoint="/api/analyze">
               <div class="field">
                 <label for="paste-platform">平台来源</label>
-                <input id="paste-platform" name="platform" value="Other overseas platform">
+                <input id="paste-platform" name="platform" list="platform-presets" value="Other overseas platform">
               </div>
 
               <div id="paste-panel" class="tab-panel" role="tabpanel">
@@ -46,7 +46,7 @@
             <form id="upload-form" class="panel input-panel is-hidden" method="post" action="/api/analyze-file" enctype="multipart/form-data" data-endpoint="/api/analyze-file">
               <div class="field">
                 <label for="upload-platform">平台来源</label>
-                <input id="upload-platform" name="platform" value="Other overseas platform">
+                <input id="upload-platform" name="platform" list="platform-presets" value="Other overseas platform">
               </div>
 
               <div id="upload-panel" class="tab-panel" role="tabpanel" hidden>
@@ -63,7 +63,7 @@
             <form id="batch-form" class="panel input-panel is-hidden" method="post" action="/api/analyze-batch-file" enctype="multipart/form-data" data-endpoint="/api/analyze-batch-file">
               <div class="field">
                 <label for="batch-platform">平台来源</label>
-                <input id="batch-platform" name="platform" value="Other overseas platform">
+                <input id="batch-platform" name="platform" list="platform-presets" value="Other overseas platform">
               </div>
 
               <div id="batch-panel" class="tab-panel" role="tabpanel" hidden>
@@ -238,6 +238,19 @@
         </section>
       </section>
     </main>
+    <datalist id="platform-presets">
+      <option value="Amazon"></option>
+      <option value="TikTok Shop"></option>
+      <option value="Shopee"></option>
+      <option value="Walmart Marketplace"></option>
+      <option value="eBay"></option>
+      <option value="Shopify"></option>
+      <option value="AliExpress"></option>
+      <option value="Lazada"></option>
+      <option value="Temu"></option>
+      <option value="Shein"></option>
+      <option value="Other overseas platform"></option>
+    </datalist>
     <template data-feedback-template>
       <form class="feedback-form">
         <label>
