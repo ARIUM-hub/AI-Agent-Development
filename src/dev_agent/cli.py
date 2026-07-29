@@ -5,6 +5,7 @@ import sys
 
 from dev_agent import __version__
 from dev_agent.encoding import UTF8, read_text_utf8, utf8_environment_hint, write_text_utf8
+from dev_agent.execution.applier import ExecutionPlanApplier
 from dev_agent.execution.plan import ExecutionPlanError, parse_execution_plan
 from dev_agent.memory.retriever import MemoryRetriever
 from dev_agent.memory.store import MemoryStore
@@ -97,6 +98,12 @@ def _load_execution_plan(path: str | None):
         raise ValueError(f"无法读取执行计划：{exc}") from exc
 
 
+def _preview_execution_plan(execution_plan):
+    if execution_plan is None:
+        return []
+    return ExecutionPlanApplier(Path.cwd()).preview(execution_plan).preview_changes_as_dicts()
+
+
 def run_command(args: Namespace) -> int:
     if args.apply and args.plan_file is None:
         sys.stderr.write("--plan-file is required when --apply is used\n")
@@ -105,6 +112,11 @@ def run_command(args: Namespace) -> int:
         execution_plan = _load_execution_plan(args.plan_file)
     except ValueError as exc:
         sys.stderr.write(str(exc) + "\n")
+        return 2
+    try:
+        preview_changes = _preview_execution_plan(execution_plan)
+    except ExecutionPlanError as exc:
+        sys.stderr.write(f"执行计划预览失败：{exc}\n")
         return 2
     runner = LocalTaskRunner(
         repo_root=Path.cwd(),
@@ -129,6 +141,7 @@ def run_command(args: Namespace) -> int:
         "verification_passed": None if result.verification_result is None else result.verification_result.passed,
         "events": result.events,
         "planned_changes": result.planned_changes,
+        "preview_changes": preview_changes,
         "applied_changes": result.applied_changes,
         "diff_stat": result.diff_stat,
         "execution_error": result.execution_error,
@@ -188,6 +201,7 @@ def build_parser() -> ArgumentParser:
     run_parser.add_argument("--dry-run", action="store_true", default=True)
     run_parser.add_argument("--verify", action="store_true")
     run_parser.add_argument("--plan-file")
+    run_parser.add_argument("--preview", action="store_true")
     run_parser.add_argument("--apply", action="store_true")
     run_parser.set_defaults(handler=run_command)
 

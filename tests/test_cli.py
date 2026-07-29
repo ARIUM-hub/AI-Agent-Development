@@ -193,8 +193,56 @@ def test_run_previews_plan_file_without_apply(tmp_path: Path) -> None:
     assert result.returncode == 0
     payload = json.loads(result.stdout)
     assert payload["planned_changes"][0]["path"] == "docs/preview.md"
+    assert payload["preview_changes"][0]["risk"] == "create"
+    assert payload["preview_changes"][0]["content_bytes"] == len("只预览\n".encode("utf-8"))
     assert payload["applied_changes"] == []
     assert not (tmp_path / "docs" / "preview.md").exists()
+
+
+def test_run_preview_outputs_preview_changes_without_writing(tmp_path: Path) -> None:
+    write_target = tmp_path / "docs" / "preview.md"
+    plan_file = tmp_path / "plan.json"
+    plan_file.write_text(
+        json.dumps(
+            {
+                "summary": "预览说明",
+                "operations": [
+                    {
+                        "action": "create_text",
+                        "path": "docs/preview.md",
+                        "content": "预览中文\n",
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_cli(
+        tmp_path,
+        "run",
+        "预览计划",
+        "--fake-response",
+        "计划：只预览。",
+        "--plan-file",
+        str(plan_file),
+        "--preview",
+    )
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["preview_changes"] == [
+        {
+            "action": "create_text",
+            "path": "docs/preview.md",
+            "exists": False,
+            "content_bytes": len("预览中文\n".encode("utf-8")),
+            "risk": "create",
+        }
+    ]
+    assert payload["applied_changes"] == []
+    assert not write_target.exists()
 
 
 def test_run_accepts_plan_file_with_utf8_bom(tmp_path: Path) -> None:
