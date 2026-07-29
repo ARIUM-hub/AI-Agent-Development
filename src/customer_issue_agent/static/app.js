@@ -35,6 +35,7 @@ document.addEventListener("DOMContentLoaded", () => {
   bindBatchForm();
   bindFeedbackForms(document);
   loadRecordsSummary();
+  bindFilteredExport();
   bindRecordFilters();
 });
 
@@ -383,6 +384,41 @@ function summaryDistribution(title, labelGroup, items = []) {
       <ul class="distribution-list">${rows}</ul>
     </article>
   `;
+}
+
+function bindFilteredExport() {
+  const button = document.querySelector("[data-filter-export]");
+  if (!button) {
+    return;
+  }
+
+  button.addEventListener("click", () => {
+    window.location.href = buildFilteredExportUrl();
+  });
+}
+
+function buildFilteredExportUrl() {
+  const params = new URLSearchParams();
+  const query = document.getElementById("record-search")?.value.trim() || "";
+  const issue = document.getElementById("issue-filter")?.value || "";
+  const responsibility = document.getElementById("responsibility-filter")?.value || "";
+  const feedback = document.getElementById("feedback-filter")?.value || "";
+
+  if (query) {
+    params.set("q", query);
+  }
+  if (issue) {
+    params.set("issue_category", issue);
+  }
+  if (responsibility) {
+    params.set("responsibility", responsibility);
+  }
+  if (feedback) {
+    params.set("feedback_status", feedback);
+  }
+
+  const queryString = params.toString();
+  return queryString ? `/api/records/export.csv?${queryString}` : "/api/records/export.csv";
 }
 
 function bindRecordFilters() {

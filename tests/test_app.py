@@ -487,3 +487,29 @@ def test_export_records_csv_endpoint_filtered_empty_returns_header(tmp_path):
     text = response.content.decode("utf-8-sig")
     lines = [line for line in text.splitlines() if line]
     assert len(lines) == 1
+
+
+def test_index_contains_filtered_export_button(tmp_path):
+    app = create_app(storage_path=tmp_path / "analyses.jsonl")
+    client = TestClient(app)
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    html = response.text
+    assert "导出筛选 CSV" in html
+    assert "data-filter-export" in html
+
+
+def test_static_app_js_contains_filtered_export_hooks(tmp_path):
+    app = create_app(storage_path=tmp_path / "analyses.jsonl")
+    client = TestClient(app)
+
+    response = client.get("/static/app.js")
+
+    assert response.status_code == 200
+    script = response.text
+    assert "bindFilteredExport" in script
+    assert "buildFilteredExportUrl" in script
+    assert "data-filter-export" in script
+    assert "feedback_status" in script
