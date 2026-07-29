@@ -345,3 +345,39 @@ def test_run_apply_without_confirmation_rejects_and_does_not_write(tmp_path: Pat
     assert result.returncode == 2
     assert "应用执行计划需要确认" in result.stderr
     assert not (tmp_path / "docs" / "needs-confirmation.md").exists()
+
+
+def test_run_preview_rejects_create_conflict_without_writing(tmp_path: Path) -> None:
+    (tmp_path / "README.md").write_text("# existing\n", encoding="utf-8")
+    plan_file = tmp_path / "plan.json"
+    plan_file.write_text(
+        json.dumps(
+            {
+                "summary": "冲突预览",
+                "operations": [
+                    {
+                        "action": "create_text",
+                        "path": "README.md",
+                        "content": "# new\n",
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_cli(
+        tmp_path,
+        "run",
+        "预览冲突",
+        "--fake-response",
+        "计划：冲突。",
+        "--plan-file",
+        str(plan_file),
+        "--preview",
+    )
+
+    assert result.returncode == 2
+    assert "执行计划预览失败" in result.stderr
+    assert (tmp_path / "README.md").read_text(encoding="utf-8") == "# existing\n"
