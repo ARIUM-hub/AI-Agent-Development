@@ -6,7 +6,9 @@ import sys
 from dev_agent import __version__
 from dev_agent.encoding import UTF8, read_text_utf8, utf8_environment_hint, write_text_utf8
 from dev_agent.execution.applier import ExecutionPlanApplier
+from dev_agent.execution.models import ExecutionPlan
 from dev_agent.execution.plan import ExecutionPlanError, parse_execution_plan
+from dev_agent.execution.provider_plan import parse_provider_execution_plan
 from dev_agent.memory.retriever import MemoryRetriever
 from dev_agent.memory.store import MemoryStore
 from dev_agent.project.scanner import scan_project
@@ -98,6 +100,14 @@ def _load_execution_plan(path: str | None):
         raise ValueError(f"无法读取执行计划：{exc}") from exc
 
 
+def _resolve_execution_plan(args: Namespace) -> ExecutionPlan | None:
+    if args.plan_file and args.use_provider_plan:
+        raise ValueError("--plan-file 不能与 --use-provider-plan 同时使用")
+    if args.use_provider_plan:
+        return parse_provider_execution_plan(args.fake_response)
+    return _load_execution_plan(args.plan_file)
+
+
 def _preview_execution_plan(execution_plan):
     if execution_plan is None:
         return []
@@ -135,12 +145,15 @@ def _confirm_apply(args: Namespace) -> bool:
 
 
 def run_command(args: Namespace) -> int:
-    if args.apply and args.plan_file is None:
-        sys.stderr.write("--plan-file is required when --apply is used\n")
+    if args.apply and args.plan_file is None and not args.use_provider_plan:
+        sys.stderr.write("--plan-file or --use-provider-plan is required when --apply is used\n")
         return 2
     try:
-        execution_plan = _load_execution_plan(args.plan_file)
+        execution_plan = _resolve_execution_plan(args)
     except ValueError as exc:
+        sys.stderr.write(str(exc) + "\n")
+        return 2
+    except ExecutionPlanError as exc:
         sys.stderr.write(str(exc) + "\n")
         return 2
     try:
@@ -237,6 +250,7 @@ def build_parser() -> ArgumentParser:
     run_parser.add_argument("--dry-run", action="store_true", default=True)
     run_parser.add_argument("--verify", action="store_true")
     run_parser.add_argument("--plan-file")
+    run_parser.add_argument("--use-provider-plan", action="store_true")
     run_parser.add_argument("--preview", action="store_true")
     run_parser.add_argument("--apply", action="store_true")
     run_parser.add_argument("--yes", action="store_true")

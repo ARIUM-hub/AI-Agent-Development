@@ -295,7 +295,7 @@ def test_run_apply_requires_plan_file(tmp_path: Path) -> None:
     )
 
     assert result.returncode == 2
-    assert "--plan-file is required when --apply is used" in result.stderr
+    assert "--plan-file or --use-provider-plan is required when --apply is used" in result.stderr
 
 
 def test_run_reports_missing_plan_file_as_cli_error(tmp_path: Path) -> None:
@@ -383,3 +383,213 @@ def test_run_preview_rejects_create_conflict_without_writing(tmp_path: Path) -> 
     assert result.returncode == 2
     assert "执行计划预览失败" in result.stderr
     assert (tmp_path / "README.md").read_text(encoding="utf-8") == "# existing\n"
+
+
+def test_run_use_provider_plan_previews_provider_json_without_side_effects(tmp_path: Path) -> None:
+    provider_plan = json.dumps(
+        {
+            "summary": "创建 provider 说明",
+            "operations": [
+                {
+                    "action": "create_text",
+                    "path": "docs/provider.md",
+                    "content": "来自 provider\n",
+                }
+            ],
+        },
+        ensure_ascii=False,
+    )
+
+    result = run_cli(
+        tmp_path,
+        "run",
+        "预览 provider 计划",
+        "--fake-response",
+        provider_plan,
+        "--use-provider-plan",
+        "--preview",
+    )
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["task_id"] is None
+    assert payload["planned_changes"][0]["path"] == "docs/provider.md"
+    assert payload["preview_changes"][0]["risk"] == "create"
+    assert payload["applied_changes"] == []
+    assert not (tmp_path / ".agent").exists()
+    assert not (tmp_path / "docs" / "provider.md").exists()
+
+
+def test_run_without_use_provider_plan_keeps_fake_response_as_plain_text(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = \"sample\"\n", encoding="utf-8")
+    provider_plan = json.dumps(
+        {
+            "summary": "不应解析",
+            "operations": [
+                {
+                    "action": "create_text",
+                    "path": "docs/plain.md",
+                    "content": "不应写入\n",
+                }
+            ],
+        },
+        ensure_ascii=False,
+    )
+
+    result = run_cli(
+        tmp_path,
+        "run",
+        "普通 dry-run",
+        "--fake-response",
+        provider_plan,
+    )
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["plan_text"] == provider_plan
+    assert payload["planned_changes"] == []
+    assert payload["preview_changes"] == []
+    assert (tmp_path / ".agent").exists()
+    assert not (tmp_path / "docs" / "plain.md").exists()
+
+
+def test_run_use_provider_plan_apply_requires_confirmation(tmp_path: Path) -> None:
+    provider_plan = json.dumps(
+        {
+            "summary": "需要确认",
+            "operations": [
+                {
+                    "action": "create_text",
+                    "path": "docs/provider-confirm.md",
+                    "content": "不应写入\n",
+                }
+            ],
+        },
+        ensure_ascii=False,
+    )
+
+    result = run_cli(
+        tmp_path,
+        "run",
+        "未确认 provider plan",
+        "--fake-response",
+        provider_plan,
+        "--use-provider-plan",
+        "--apply",
+    )
+
+    assert result.returncode == 2
+    assert "应用执行计划需要确认" in result.stderr
+    assert not (tmp_path / "docs" / "provider-confirm.md").exists()
+
+
+def test_run_use_provider_plan_apply_yes_writes_file(tmp_path: Path) -> None:
+    provider_plan = json.dumps(
+        {
+            "summary": "确认写入",
+            "operations": [
+                {
+                    "action": "create_text",
+                    "path": "docs/provider-apply.md",
+                    "content": "确认写入\n",
+                }
+            ],
+        },
+        ensure_ascii=False,
+    )
+
+    result = run_cli(
+        tmp_path,
+        "run",
+        "确认 provider plan",
+        "--fake-response",
+        provider_plan,
+        "--use-provider-plan",
+        "--apply",
+        "--yes",
+    )
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["applied_changes"][0]["path"] == "docs/provider-apply.md"
+    assert (tmp_path / "docs" / "provider-apply.md").read_text(encoding="utf-8") == "确认写入\n"
+
+
+def test_run_use_provider_plan_rejects_malformed_json_without_writing(tmp_path: Path) -> None:
+    result = run_cli(
+        tmp_path,
+        "run",
+        "坏 provider plan",
+        "--fake-response",
+        '{"summary":',
+        "--use-provider-plan",
+        "--preview",
+    )
+
+    assert result.returncode == 2
+    assert "无法解析 provider 执行计划" in result.stderr
+    assert not (tmp_path / ".agent").exists()
+
+
+def test_run_use_provider_plan_rejects_dangerous_path_without_writing(tmp_path: Path) -> None:
+    provider_plan = json.dumps(
+        {
+            "summary": "危险路径",
+            "operations": [
+                {
+                    "action": "create_text",
+                    "path": "../escape.md",
+                    "content": "不应写入\n",
+                }
+            ],
+        },
+        ensure_ascii=False,
+    )
+
+    result = run_cli(
+        tmp_path,
+        "run",
+        "危险 provider plan",
+        "--fake-response",
+        provider_plan,
+        "--use-provider-plan",
+        "--preview",
+    )
+
+    assert result.returncode == 2
+    assert "执行计划预览失败" in result.stderr
+    assert not (tmp_path.parent / "escape.md").exists()
+
+
+def test_run_rejects_plan_file_with_use_provider_plan(tmp_path: Path) -> None:
+    plan_file = tmp_path / "plan.json"
+    plan_file.write_text(
+        json.dumps(
+            {
+                "summary": "文件计划",
+                "operations": [
+                    {
+                        "action": "create_text",
+                        "path": "docs/file.md",
+                        "content": "file\n",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_cli(
+        tmp_path,
+        "run",
+        "来源歧义",
+        "--fake-response",
+        "{}",
+        "--plan-file",
+        str(plan_file),
+        "--use-provider-plan",
+    )
+
+    assert result.returncode == 2
+    assert "--plan-file 不能与 --use-provider-plan 同时使用" in result.stderr
+    assert not (tmp_path / "docs" / "file.md").exists()
