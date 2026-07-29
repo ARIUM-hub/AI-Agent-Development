@@ -1,5 +1,6 @@
 from dev_agent.memory.keyword import KeywordRetriever
 from dev_agent.memory.models import ExperienceRecord, TaskRecord
+from dev_agent.memory.vector import HashEmbeddingProvider, VectorIndex
 
 
 def test_keyword_retriever_finds_task_by_chinese_terms() -> None:
@@ -40,3 +41,16 @@ def test_keyword_retriever_finds_experience_by_text() -> None:
 
     assert hits[0].record_id == "exp-1"
     assert hits[0].kind == "experience"
+
+
+def test_vector_index_returns_nearest_text() -> None:
+    provider = HashEmbeddingProvider(dimensions=32)
+    index = VectorIndex(provider)
+    index.add(record_id="exp-1", kind="experience", text="Windows UTF-8 编码修复")
+    index.add(record_id="exp-2", kind="experience", text="Git 提交与推送流程")
+
+    hits = index.search("UTF-8 编码", limit=1)
+
+    assert hits[0].record_id == "exp-1"
+    assert hits[0].kind == "experience"
+    assert hits[0].score > 0
