@@ -438,3 +438,52 @@ def test_styles_cover_summary_dashboard_components(tmp_path):
     assert ".summary-metrics" in css
     assert ".summary-card" in css
     assert ".distribution-list" in css
+
+
+def test_export_records_csv_endpoint_filters_by_query_params(tmp_path):
+    app = create_app(storage_path=tmp_path / "analyses.jsonl")
+    client = TestClient(app)
+    amazon_response = client.post(
+        "/api/analyze",
+        data={"platform": "Amazon", "conversation_text": "Customer: not working"},
+    )
+    tiktok_response = client.post(
+        "/api/analyze",
+        data={"platform": "TikTok Shop", "conversation_text": "Customer: missing cable"},
+    )
+    client.post(
+        f"/api/records/{amazon_response.json()['record_id']}/feedback",
+        data={"accepted": "false", "note": "需要产品团队复核"},
+    )
+    client.post(
+        f"/api/records/{tiktok_response.json()['record_id']}/feedback",
+        data={"accepted": "true"},
+    )
+
+    response = client.get(
+        "/api/records/export.csv",
+        params={"platform": "amazon", "feedback_status": "corrected", "q": "产品团队"},
+    )
+
+    assert response.status_code == 200
+    text = response.content.decode("utf-8-sig")
+    assert "Amazon" in text
+    assert "TikTok Shop" not in text
+    assert "需要产品团队复核" in text
+
+
+def test_export_records_csv_endpoint_filtered_empty_returns_header(tmp_path):
+    app = create_app(storage_path=tmp_path / "analyses.jsonl")
+    client = TestClient(app)
+    client.post(
+        "/api/analyze",
+        data={"platform": "Amazon", "conversation_text": "Customer: not working"},
+    )
+
+    response = client.get("/api/records/export.csv", params={"feedback_status": "archived"})
+
+    assert response.status_code == 200
+    assert response.content.startswith(b"\xef\xbb\xbf")
+    text = response.content.decode("utf-8-sig")
+    lines = [line for line in text.splitlines() if line]
+    assert len(lines) == 1

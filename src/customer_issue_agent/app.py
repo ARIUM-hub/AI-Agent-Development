@@ -14,6 +14,7 @@ from customer_issue_agent.domain import AnalysisRequest, AnalysisResult
 from customer_issue_agent.export import build_records_csv
 from customer_issue_agent.ingestion import extract_batch_conversation_texts, extract_conversation_text
 from customer_issue_agent.parser import parse_conversation
+from customer_issue_agent.record_filters import filter_records
 from customer_issue_agent.report import build_report
 from customer_issue_agent.storage import AnalysisStore
 from customer_issue_agent.summary import build_records_summary
@@ -97,9 +98,23 @@ def create_app(storage_path: Path | None = None) -> FastAPI:
         return {"record_id": record_id, "feedback": feedback}
 
     @app.get("/api/records/export.csv")
-    async def export_records_csv() -> Response:
+    async def export_records_csv(
+        platform: str = "",
+        issue_category: str = "",
+        responsibility: str = "",
+        feedback_status: str = "",
+        q: str = "",
+    ) -> Response:
+        records = filter_records(
+            store.list_records(),
+            platform=platform,
+            issue_category=issue_category,
+            responsibility=responsibility,
+            feedback_status=feedback_status,
+            q=q,
+        )
         return Response(
-            content=build_records_csv(store.list_records()),
+            content=build_records_csv(records),
             media_type="text/csv; charset=utf-8",
             headers={"Content-Disposition": "attachment; filename=customer-issue-records.csv"},
         )
