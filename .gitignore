@@ -2,3 +2,7 @@
 .worktrees/
 .superpowers
 .superpowers/
+data/
+src/*.egg-info/
+__pycache__/
+.pytest_cache/

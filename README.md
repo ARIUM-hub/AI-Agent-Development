@@ -14,3 +14,19 @@ python -m uvicorn customer_issue_agent.app:create_app --factory --reload
 ## 安全约束
 
 首版不批量请求模型供应商，不进行压力测试，不自动循环重试。默认使用本地规则归因，后续接入模型时保持单会话、低并发、可人工复核。
+
+## 手动验收样例
+
+平台来源填写 `Other overseas platform`，客服会话填写：
+
+```text
+Customer: I followed the instructions but it still will not connect.
+Agent: Please try again later.
+```
+
+预期结果包含：
+
+- 客户问题：连接、配对或设置失败。
+- 业务原因：说明或引导不清，且客服排障引导不足。
+- 优先责任方：客服培训。
+- 下一步建议：补问设备型号、系统版本、连接方式和错误提示。
