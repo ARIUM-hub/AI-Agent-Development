@@ -359,3 +359,40 @@ def test_styles_cover_recent_record_filter_components(tmp_path):
     assert ".filter-field" in css
     assert ".filter-count" in css
     assert ".filter-empty" in css
+
+
+def test_records_summary_endpoint_returns_counts(tmp_path):
+    app = create_app(storage_path=tmp_path / "analyses.jsonl")
+    client = TestClient(app)
+    analysis_response = client.post(
+        "/api/analyze",
+        data={"platform": "Amazon", "conversation_text": "Customer: not working"},
+    )
+    record_id = analysis_response.json()["record_id"]
+    client.post(f"/api/records/{record_id}/feedback", data={"accepted": "false"})
+
+    response = client.get("/api/records/summary")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total_records"] == 1
+    assert payload["reviewed_records"] == 1
+    assert payload["corrected_records"] == 1
+    assert payload["issue_categories"]
+    assert payload["responsibilities"]
+    assert payload["evidence_strengths"]
+    assert payload["feedback_statuses"] == [{"value": "corrected", "count": 1}]
+
+
+def test_records_summary_endpoint_returns_empty_summary(tmp_path):
+    app = create_app(storage_path=tmp_path / "analyses.jsonl")
+    client = TestClient(app)
+
+    response = client.get("/api/records/summary")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total_records"] == 0
+    assert payload["reviewed_records"] == 0
+    assert payload["corrected_records"] == 0
+    assert payload["issue_categories"] == []

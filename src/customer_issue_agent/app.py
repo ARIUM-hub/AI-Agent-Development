@@ -16,6 +16,7 @@ from customer_issue_agent.ingestion import extract_batch_conversation_texts, ext
 from customer_issue_agent.parser import parse_conversation
 from customer_issue_agent.report import build_report
 from customer_issue_agent.storage import AnalysisStore
+from customer_issue_agent.summary import build_records_summary
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 DEFAULT_STORAGE = Path("data") / "analyses.jsonl"
@@ -102,6 +103,10 @@ def create_app(storage_path: Path | None = None) -> FastAPI:
             media_type="text/csv; charset=utf-8",
             headers={"Content-Disposition": "attachment; filename=customer-issue-records.csv"},
         )
+
+    @app.get("/api/records/summary")
+    async def records_summary() -> dict:
+        return build_records_summary(store.list_records())
 
     return app
 
