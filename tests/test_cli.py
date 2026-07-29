@@ -245,3 +245,19 @@ def test_run_apply_requires_plan_file(tmp_path: Path) -> None:
 
     assert result.returncode == 2
     assert "--plan-file is required when --apply is used" in result.stderr
+
+
+def test_run_reports_missing_plan_file_as_cli_error(tmp_path: Path) -> None:
+    result = run_cli(
+        tmp_path,
+        "run",
+        "缺少计划文件",
+        "--fake-response",
+        "计划：失败。",
+        "--plan-file",
+        str(tmp_path / "missing.json"),
+        "--apply",
+    )
+
+    assert result.returncode == 2
+    assert "无法读取执行计划" in result.stderr

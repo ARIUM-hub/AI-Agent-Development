@@ -93,7 +93,7 @@ def _load_execution_plan(path: str | None):
         return None
     try:
         return parse_execution_plan(json.loads(read_text_utf8(Path(path)).lstrip("\ufeff")))
-    except (json.JSONDecodeError, ExecutionPlanError) as exc:
+    except (OSError, json.JSONDecodeError, ExecutionPlanError) as exc:
         raise ValueError(f"无法读取执行计划：{exc}") from exc
 
 

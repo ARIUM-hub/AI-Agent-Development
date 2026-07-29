@@ -45,7 +45,10 @@ def test_applier_rejects_create_when_file_exists(tmp_path) -> None:
         "",
         "../escape.md",
         ".git/config",
+        ".GIT/config",
         ".worktrees/other/file.md",
+        "docs/.git/config",
+        "docs/.WorkTrees/file.md",
         ".superpowers/cache.md",
     ],
 )
@@ -57,3 +60,20 @@ def test_applier_rejects_unsafe_paths(tmp_path, unsafe_path: str) -> None:
 
     with pytest.raises(ExecutionPlanError):
         ExecutionPlanApplier(tmp_path).apply(plan)
+
+
+def test_applier_validates_all_operations_before_writing(tmp_path) -> None:
+    write_text_utf8(tmp_path / "README.md", "# existing\n")
+    plan = ExecutionPlan(
+        summary="atomic validation",
+        operations=[
+            ExecutionOperation("create_text", "docs/first.md", "first\n"),
+            ExecutionOperation("create_text", "README.md", "# new\n"),
+        ],
+    )
+
+    with pytest.raises(ExecutionPlanError, match="already exists"):
+        ExecutionPlanApplier(tmp_path).apply(plan)
+
+    assert not (tmp_path / "docs" / "first.md").exists()
+    assert read_text_utf8(tmp_path / "README.md") == "# existing\n"

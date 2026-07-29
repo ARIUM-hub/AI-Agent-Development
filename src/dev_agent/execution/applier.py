@@ -7,6 +7,8 @@ from dev_agent.tools.git import GitReader
 
 
 FORBIDDEN_ROOTS = {".git", ".worktrees", ".superpowers"}
+FORBIDDEN_ROOT_NAMES = {name.casefold() for name in FORBIDDEN_ROOTS}
+SUPPORTED_ACTIONS = {"create_text", "overwrite_text", "append_text"}
 
 
 class ExecutionPlanApplier:
@@ -23,6 +25,7 @@ class ExecutionPlanApplier:
         )
 
     def apply(self, plan: ExecutionPlan) -> ExecutionResult:
+        self._validate_operations(plan)
         changes: list[ExecutionChange] = []
         for operation in plan.operations:
             target = self._resolve_target(operation.path)
@@ -68,6 +71,17 @@ class ExecutionPlanApplier:
         except ValueError as exc:
             raise ExecutionPlanError(f"path escapes repository: {raw_path}") from exc
         relative_parts = target.relative_to(repo_root).parts
-        if relative_parts and relative_parts[0] in FORBIDDEN_ROOTS:
+        if any(part.casefold() in FORBIDDEN_ROOT_NAMES for part in relative_parts):
             raise ExecutionPlanError(f"path is not allowed: {raw_path}")
         return target
+
+    def _validate_operations(self, plan: ExecutionPlan) -> None:
+        created_targets: set[Path] = set()
+        for operation in plan.operations:
+            if operation.action not in SUPPORTED_ACTIONS:
+                raise ExecutionPlanError(f"unsupported action: {operation.action}")
+            target = self._resolve_target(operation.path)
+            if operation.action == "create_text":
+                if target.exists() or target in created_targets:
+                    raise ExecutionPlanError(f"path already exists: {operation.path}")
+                created_targets.add(target)
