@@ -36,6 +36,13 @@ def doctor_command(args: Namespace) -> int:
         "version": __version__,
         "encoding": UTF8,
         "powershell_utf8_hint": utf8_environment_hint(),
+        "capabilities": {
+            "provider_interface": True,
+            "budget_protection": True,
+            "command_executor": True,
+            "git_reader": True,
+            "verification_runner": True,
+        },
     }
     sys.stdout.write(_json(payload))
     return 0
