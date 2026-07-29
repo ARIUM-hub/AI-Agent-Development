@@ -44,6 +44,8 @@ def test_doctor_outputs_json(tmp_path: Path) -> None:
         "command_executor": True,
         "git_reader": True,
         "verification_runner": True,
+        "runtime_context": True,
+        "local_task_runner": True,
     }
 
 

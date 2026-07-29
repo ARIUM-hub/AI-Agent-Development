@@ -47,6 +47,8 @@ def doctor_command(args: Namespace) -> int:
             "command_executor": True,
             "git_reader": True,
             "verification_runner": True,
+            "runtime_context": True,
+            "local_task_runner": True,
         },
     }
     sys.stdout.write(_json(payload))
