@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>客户使用问题归因智能体</title>
     <link rel="stylesheet" href="/static/styles.css">
+    <script src="/static/app.js" defer></script>
   </head>
   <body>
     <main class="shell">
@@ -13,32 +14,83 @@
           <div>
             <p class="eyebrow">海外电商 · 客服会话分析</p>
             <h1>客户使用问题归因智能体</h1>
+            <p class="subtitle">粘贴或上传客服会话，生成客户问题、业务原因、责任方和下一步建议。</p>
           </div>
           <span class="status">本地规则模式</span>
         </header>
 
-        <form class="panel" method="post" action="/api/analyze">
-          <label for="platform">平台来源</label>
-          <input id="platform" name="platform" value="Other overseas platform">
+        <section class="workspace-grid">
+          <div class="input-stack">
+            <div class="tabs" role="tablist" aria-label="输入方式">
+              <button class="tab is-active" type="button" role="tab" aria-selected="true" aria-controls="paste-panel" data-tab-target="paste-panel">粘贴会话</button>
+              <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="upload-panel" data-tab-target="upload-panel">上传文件</button>
+            </div>
 
-          <label for="conversation_text">客服会话</label>
-          <textarea id="conversation_text" name="conversation_text" rows="12" placeholder="Customer: I followed the instructions but it still will not connect.&#10;Agent: Please try again later."></textarea>
+            <form id="paste-form" class="panel input-panel" method="post" action="/api/analyze" data-endpoint="/api/analyze">
+              <div class="field">
+                <label for="paste-platform">平台来源</label>
+                <input id="paste-platform" name="platform" value="Other overseas platform">
+              </div>
 
-          <button type="submit">分析会话</button>
-        </form>
+              <div id="paste-panel" class="tab-panel" role="tabpanel">
+                <div class="field">
+                  <label for="conversation_text">客服会话</label>
+                  <textarea id="conversation_text" name="conversation_text" rows="12" placeholder="Customer: I followed the instructions but it still will not connect.&#10;Agent: Please try again later."></textarea>
+                </div>
+                <p id="paste-error" class="form-message" role="alert" aria-live="polite"></p>
+                <button class="primary-action" type="submit" data-loading-label="分析中...">分析会话</button>
+              </div>
+            </form>
+
+            <form id="upload-form" class="panel input-panel is-hidden" method="post" action="/api/analyze-file" enctype="multipart/form-data" data-endpoint="/api/analyze-file">
+              <div class="field">
+                <label for="upload-platform">平台来源</label>
+                <input id="upload-platform" name="platform" value="Other overseas platform">
+              </div>
+
+              <div id="upload-panel" class="tab-panel" role="tabpanel" hidden>
+                <div class="field">
+                  <label for="conversation-file">客服会话文件</label>
+                  <input id="conversation-file" name="file" type="file" accept=".txt,.log,.csv,.xlsx,.xlsm">
+                  <p class="helper">支持 txt、log、csv、xlsx、xlsm。</p>
+                </div>
+                <p id="upload-error" class="form-message" role="alert" aria-live="polite"></p>
+                <button class="primary-action" type="submit" data-loading-label="上传分析中...">上传并分析</button>
+              </div>
+            </form>
+          </div>
+
+          <section id="analysis-result" class="panel result-panel" aria-live="polite">
+            <div class="result-empty">
+              <p class="eyebrow">等待分析</p>
+              <h2>结果会显示在这里</h2>
+              <p>提交会话后，系统会拆出客户问题、业务原因、责任方、下一步建议和需要补充的信息。</p>
+            </div>
+          </section>
+        </section>
 
         <section class="history" aria-label="最近分析记录">
-          <h2>最近记录</h2>
-          {% if records %}
-            {% for record in records|reverse %}
-              <article class="record">
-                <strong>{{ record.analysis.request.platform }}</strong>
-                <p>{{ record.analysis.report }}</p>
-              </article>
-            {% endfor %}
-          {% else %}
-            <p class="empty">还没有分析记录。</p>
-          {% endif %}
+          <div class="section-heading">
+            <h2>最近记录</h2>
+            <span>{{ records|length }} 条</span>
+          </div>
+          <div id="recent-records" class="record-list">
+            {% if records %}
+              {% for record in records|reverse %}
+                <article class="record" data-record-id="{{ record.id }}">
+                  <div class="record-meta">
+                    <strong>{{ record.analysis.request.platform }}</strong>
+                    <span>{{ record.analysis.attribution.issue_category }}</span>
+                    <span>{{ record.analysis.attribution.primary_responsibility }}</span>
+                    <span>{{ record.analysis.attribution.evidence_strength }}</span>
+                  </div>
+                  <p>{{ record.analysis.report }}</p>
+                </article>
+              {% endfor %}
+            {% else %}
+              <p class="empty">还没有分析记录。</p>
+            {% endif %}
+          </div>
         </section>
       </section>
     </main>

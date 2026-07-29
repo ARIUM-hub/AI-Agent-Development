@@ -101,3 +101,21 @@ def test_analyze_file_upload_returns_report(tmp_path):
     assert payload["record_id"]
     assert "客户问题" in payload["analysis"]["report"]
     assert payload["analysis"]["request"]["platform"] == "Other overseas platform"
+
+
+def test_index_contains_tabs_forms_result_region_and_script(tmp_path):
+    app = create_app(storage_path=tmp_path / "analyses.jsonl")
+    client = TestClient(app)
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    html = response.text
+    assert 'data-tab-target="paste-panel"' in html
+    assert 'data-tab-target="upload-panel"' in html
+    assert 'id="paste-form"' in html
+    assert 'id="upload-form"' in html
+    assert 'id="analysis-result"' in html
+    assert 'id="recent-records"' in html
+    assert 'role="alert"' in html
+    assert '<script src="/static/app.js" defer></script>' in html
