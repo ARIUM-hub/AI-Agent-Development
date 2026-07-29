@@ -383,3 +383,71 @@ def test_run_preview_rejects_create_conflict_without_writing(tmp_path: Path) -> 
     assert result.returncode == 2
     assert "执行计划预览失败" in result.stderr
     assert (tmp_path / "README.md").read_text(encoding="utf-8") == "# existing\n"
+
+
+def test_run_use_provider_plan_previews_provider_json_without_side_effects(tmp_path: Path) -> None:
+    provider_plan = json.dumps(
+        {
+            "summary": "创建 provider 说明",
+            "operations": [
+                {
+                    "action": "create_text",
+                    "path": "docs/provider.md",
+                    "content": "来自 provider\n",
+                }
+            ],
+        },
+        ensure_ascii=False,
+    )
+
+    result = run_cli(
+        tmp_path,
+        "run",
+        "预览 provider 计划",
+        "--fake-response",
+        provider_plan,
+        "--use-provider-plan",
+        "--preview",
+    )
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["task_id"] is None
+    assert payload["planned_changes"][0]["path"] == "docs/provider.md"
+    assert payload["preview_changes"][0]["risk"] == "create"
+    assert payload["applied_changes"] == []
+    assert not (tmp_path / ".agent").exists()
+    assert not (tmp_path / "docs" / "provider.md").exists()
+
+
+def test_run_without_use_provider_plan_keeps_fake_response_as_plain_text(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = \"sample\"\n", encoding="utf-8")
+    provider_plan = json.dumps(
+        {
+            "summary": "不应解析",
+            "operations": [
+                {
+                    "action": "create_text",
+                    "path": "docs/plain.md",
+                    "content": "不应写入\n",
+                }
+            ],
+        },
+        ensure_ascii=False,
+    )
+
+    result = run_cli(
+        tmp_path,
+        "run",
+        "普通 dry-run",
+        "--fake-response",
+        provider_plan,
+    )
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["plan_text"] == provider_plan
+    assert payload["planned_changes"] == []
+    assert payload["preview_changes"] == []
+    assert (tmp_path / ".agent").exists()
+    assert not (tmp_path / "docs" / "plain.md").exists()
