@@ -134,3 +134,19 @@ def test_static_app_js_contains_progressive_enhancement_hooks(tmp_path):
     assert "renderAnalysisResult" in script
     assert "prependRecentRecord" in script
     assert "fetch(form.dataset.endpoint" in script
+
+
+def test_styles_cover_enhanced_workbench_components(tmp_path):
+    app = create_app(storage_path=tmp_path / "analyses.jsonl")
+    client = TestClient(app)
+
+    response = client.get("/static/styles.css")
+
+    assert response.status_code == 200
+    css = response.text
+    assert ".workspace-grid" in css
+    assert ".tabs" in css
+    assert ".result-grid" in css
+    assert ".result-card" in css
+    assert ".form-message.is-visible" in css
+    assert "@media (max-width: 720px)" in css
