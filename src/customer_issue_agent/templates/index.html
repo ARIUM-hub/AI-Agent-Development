@@ -98,10 +98,61 @@
             </div>
             <a class="secondary-action" href="/api/records/export.csv">导出 CSV</a>
           </div>
+          <form id="record-filter" class="record-filter" role="search" aria-label="筛选最近记录">
+            <label class="filter-field" for="record-search">
+              <span>关键词</span>
+              <input id="record-search" name="search" type="search" placeholder="搜索平台、报告或记录 ID">
+            </label>
+            <label class="filter-field" for="issue-filter">
+              <span>问题类型</span>
+              <select id="issue-filter" name="issue_category">
+                <option value="">全部问题类型</option>
+                <option value="installation">安装、开箱或组装问题</option>
+                <option value="function_use">功能不会用或设置失败</option>
+                <option value="expectation_gap">功能表现未达到预期</option>
+                <option value="product_fault">产品异常或质量问题</option>
+                <option value="compatibility">兼容性问题</option>
+                <option value="accessory">配件或使用条件问题</option>
+                <option value="non_usage">非产品使用问题</option>
+                <option value="unclear">信息不足</option>
+              </select>
+            </label>
+            <label class="filter-field" for="responsibility-filter">
+              <span>责任方</span>
+              <select id="responsibility-filter" name="responsibility">
+                <option value="">全部责任方</option>
+                <option value="operations">运营</option>
+                <option value="customer_service_training">客服培训</option>
+                <option value="product">产品</option>
+                <option value="supply_chain_quality">供应链或质量</option>
+                <option value="need_more_information">需要补充信息</option>
+              </select>
+            </label>
+            <label class="filter-field" for="feedback-filter">
+              <span>复核状态</span>
+              <select id="feedback-filter" name="feedback_status">
+                <option value="">全部复核状态</option>
+                <option value="unreviewed">未复核</option>
+                <option value="accepted">已认可</option>
+                <option value="corrected">已修正</option>
+              </select>
+            </label>
+            <button class="secondary-action" type="button" data-filter-reset>清空</button>
+            <p id="filter-count" class="filter-count" aria-live="polite">当前显示 {{ records|length }} / {{ records|length }} 条</p>
+          </form>
+          <p id="filter-empty" class="filter-empty" hidden>没有符合条件的记录。</p>
           <div id="recent-records" class="record-list">
             {% if records %}
               {% for record in records|reverse %}
-                <article class="record" data-record-id="{{ record.id }}">
+                <article
+                  class="record"
+                  data-record-id="{{ record.id }}"
+                  data-platform="{{ record.analysis.request.platform }}"
+                  data-issue-category="{{ record.analysis.attribution.issue_category }}"
+                  data-responsibility="{{ record.analysis.attribution.primary_responsibility }}"
+                  data-feedback-status="{{ 'accepted' if record.feedback and record.feedback.accepted else 'corrected' if record.feedback else 'unreviewed' }}"
+                  data-search-text="{{ record.id }} {{ record.analysis.request.platform }} {{ record.analysis.report }} {{ record.feedback.note if record.feedback and record.feedback.note else '' }}"
+                >
                   <div class="record-meta">
                     <strong>{{ record.analysis.request.platform }}</strong>
                     <span>{{ record.analysis.attribution.issue_category }}</span>

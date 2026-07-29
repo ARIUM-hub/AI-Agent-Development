@@ -293,3 +293,41 @@ def test_index_contains_export_csv_link(tmp_path):
     assert response.status_code == 200
     assert 'href="/api/records/export.csv"' in response.text
     assert "导出 CSV" in response.text
+
+
+def test_index_contains_recent_record_filter_controls(tmp_path):
+    app = create_app(storage_path=tmp_path / "analyses.jsonl")
+    client = TestClient(app)
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    html = response.text
+    assert 'id="record-filter"' in html
+    assert 'id="record-search"' in html
+    assert 'id="issue-filter"' in html
+    assert 'id="responsibility-filter"' in html
+    assert 'id="feedback-filter"' in html
+    assert 'id="filter-count"' in html
+    assert 'id="filter-empty"' in html
+    assert 'data-filter-reset' in html
+
+
+def test_recent_records_include_filter_data_attributes(tmp_path):
+    app = create_app(storage_path=tmp_path / "analyses.jsonl")
+    client = TestClient(app)
+    response = client.post(
+        "/api/analyze",
+        data={"platform": "Amazon", "conversation_text": "Customer: not working"},
+    )
+    record_id = response.json()["record_id"]
+    client.post(f"/api/records/{record_id}/feedback", data={"accepted": "true"})
+
+    html = client.get("/").text
+
+    assert 'data-record-id="' in html
+    assert 'data-platform="Amazon"' in html
+    assert 'data-issue-category="' in html
+    assert 'data-responsibility="' in html
+    assert 'data-feedback-status="accepted"' in html
+    assert 'data-search-text="' in html
