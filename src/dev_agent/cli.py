@@ -8,6 +8,9 @@ from dev_agent.encoding import UTF8, utf8_environment_hint, write_text_utf8
 from dev_agent.memory.retriever import MemoryRetriever
 from dev_agent.memory.store import MemoryStore
 from dev_agent.project.scanner import scan_project
+from dev_agent.providers.base import FakeProvider
+from dev_agent.runtime.models import TaskRunOptions
+from dev_agent.runtime.runner import LocalTaskRunner
 
 
 def _json(data: dict[str, object]) -> str:
@@ -80,6 +83,29 @@ def history_command(args: Namespace) -> int:
     return 0
 
 
+def run_command(args: Namespace) -> int:
+    runner = LocalTaskRunner(
+        repo_root=Path.cwd(),
+        home_dir=Path.home(),
+        provider=FakeProvider(name="fake-main", responses=[args.fake_response]),
+    )
+    result = runner.run(
+        args.request,
+        TaskRunOptions(dry_run=args.dry_run, run_verification=args.verify),
+    )
+    payload = {
+        "task_id": result.task_id,
+        "plan_text": result.plan_text,
+        "dry_run": result.dry_run,
+        "memory_hit_count": result.memory_hit_count,
+        "verification_steps": result.verification_steps,
+        "verification_passed": None if result.verification_result is None else result.verification_result.passed,
+        "events": result.events,
+    }
+    sys.stdout.write(_json(payload))
+    return 0
+
+
 def build_parser() -> ArgumentParser:
     parser = ArgumentParser(prog="dev-agent")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -96,6 +122,13 @@ def build_parser() -> ArgumentParser:
     history_parser = subparsers.add_parser("history")
     history_parser.add_argument("--query")
     history_parser.set_defaults(handler=history_command)
+
+    run_parser = subparsers.add_parser("run")
+    run_parser.add_argument("request")
+    run_parser.add_argument("--fake-response", required=True)
+    run_parser.add_argument("--dry-run", action="store_true", default=True)
+    run_parser.add_argument("--verify", action="store_true")
+    run_parser.set_defaults(handler=run_command)
 
     return parser
 
