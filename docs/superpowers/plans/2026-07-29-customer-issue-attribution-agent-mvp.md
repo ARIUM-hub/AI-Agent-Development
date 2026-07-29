@@ -1258,7 +1258,9 @@ DEFAULT_STORAGE = Path("data") / "analyses.jsonl"
 def create_app(storage_path: Path | None = None) -> FastAPI:
     app = FastAPI(title="客户使用问题归因智能体")
     templates = Jinja2Templates(directory=str(PACKAGE_DIR / "templates"))
-    app.mount("/static", StaticFiles(directory=str(PACKAGE_DIR / "static")), name="static")
+    static_dir = PACKAGE_DIR / "static"
+    if static_dir.exists():
+        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
     store = AnalysisStore(storage_path or DEFAULT_STORAGE)
 
     @app.get("/", response_class=HTMLResponse)
