@@ -616,3 +616,29 @@ def test_static_app_js_contains_summary_range_hooks(tmp_path):
     assert "summary-range" in script
     assert 'params.set("range", range)' in script
     assert 'params.set("range", summaryRange)' in script
+
+
+def test_recent_records_include_expandable_detail_markup(tmp_path):
+    app = create_app(storage_path=tmp_path / "analyses.jsonl")
+    client = TestClient(app)
+    response = client.post(
+        "/api/analyze",
+        data={"platform": "Amazon", "conversation_text": "Customer: not working"},
+    )
+    record_id = response.json()["record_id"]
+    client.post(
+        f"/api/records/{record_id}/feedback",
+        data={"accepted": "false", "note": "需要复核安装步骤"},
+    )
+
+    html = client.get("/").text
+
+    assert "查看详情" in html
+    assert "data-record-detail-toggle" in html
+    assert 'aria-expanded="false"' in html
+    assert 'aria-controls="record-detail-' in html
+    assert 'class="record-detail"' in html
+    assert "客户问题" in html
+    assert "下一步建议" in html
+    assert "人工备注" in html
+    assert "需要复核安装步骤" in html
