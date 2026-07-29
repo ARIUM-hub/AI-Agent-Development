@@ -530,24 +530,85 @@ Expected: each command exits 0; `doctor` reports runtime and web capabilities; `
 Run:
 
 ```powershell
-$smoke = Join-Path $env:TEMP ('dev-agent-provider-plan-smoke-' + [System.Guid]::NewGuid().ToString('N'))
-New-Item -ItemType Directory -Path $smoke | Out-Null
-Set-Content -LiteralPath (Join-Path $smoke 'pyproject.toml') -Value "[project]`nname = `"sample`"`n" -Encoding UTF8
-$providerPlan = @{
-  summary = '创建 provider plan smoke 文件'
-  operations = @(
-    @{
-      action = 'create_text'
-      path = 'docs/provider-smoke.md'
-      content = "Provider plan smoke`n"
-    }
-  )
-} | ConvertTo-Json -Depth 5 -Compress
-Push-Location $smoke
-python -m dev_agent.cli run "预览 provider plan" --fake-response $providerPlan --use-provider-plan --preview
-python -m dev_agent.cli run "未确认 provider plan" --fake-response $providerPlan --use-provider-plan --apply
-python -m dev_agent.cli run "确认 provider plan" --fake-response $providerPlan --use-provider-plan --apply --yes
-Pop-Location
+$script = @'
+import json
+import os
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+repo = Path.cwd()
+smoke = Path(tempfile.mkdtemp(prefix="dev-agent-provider-plan-smoke-"))
+(smoke / "pyproject.toml").write_text('[project]\nname = "sample"\n', encoding="utf-8")
+provider_plan = json.dumps(
+    {
+        "summary": "创建 provider plan smoke 文件",
+        "operations": [
+            {
+                "action": "create_text",
+                "path": "docs/provider-smoke.md",
+                "content": "Provider plan smoke\n",
+            }
+        ],
+    },
+    ensure_ascii=False,
+    separators=(",", ":"),
+)
+env = os.environ.copy()
+env["PYTHONPATH"] = str(repo / "src")
+env["PYTHONIOENCODING"] = "utf-8"
+env["PYTHONUTF8"] = "1"
+
+def run_cli(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, "-m", "dev_agent.cli", *args],
+        cwd=smoke,
+        env=env,
+        text=True,
+        encoding="utf-8",
+        capture_output=True,
+    )
+
+preview = run_cli("run", "预览 provider plan", "--fake-response", provider_plan, "--use-provider-plan", "--preview")
+preview_file_exists = (smoke / "docs" / "provider-smoke.md").exists()
+preview_agent_exists = (smoke / ".agent").exists()
+unconfirmed = run_cli("run", "未确认 provider plan", "--fake-response", provider_plan, "--use-provider-plan", "--apply")
+unconfirmed_file_exists = (smoke / "docs" / "provider-smoke.md").exists()
+confirmed = run_cli("run", "确认 provider plan", "--fake-response", provider_plan, "--use-provider-plan", "--apply", "--yes")
+confirmed_path = smoke / "docs" / "provider-smoke.md"
+confirmed_content = confirmed_path.read_text(encoding="utf-8") if confirmed_path.exists() else None
+
+print(json.dumps(
+    {
+        "smoke_dir": str(smoke),
+        "preview_exit": preview.returncode,
+        "preview_has_preview_changes": bool(json.loads(preview.stdout)["preview_changes"]) if preview.returncode == 0 else False,
+        "preview_created_file": preview_file_exists,
+        "preview_created_agent_dir": preview_agent_exists,
+        "unconfirmed_exit": unconfirmed.returncode,
+        "unconfirmed_created_file": unconfirmed_file_exists,
+        "unconfirmed_stderr": unconfirmed.stderr.strip(),
+        "confirmed_exit": confirmed.returncode,
+        "confirmed_content": confirmed_content,
+    },
+    ensure_ascii=False,
+    indent=2,
+))
+
+assert preview.returncode == 0, preview.stderr
+assert json.loads(preview.stdout)["preview_changes"]
+assert not preview_file_exists
+assert not preview_agent_exists
+assert unconfirmed.returncode == 2, unconfirmed.stderr
+assert not unconfirmed_file_exists
+assert "应用执行计划需要确认" in unconfirmed.stderr
+assert confirmed.returncode == 0, confirmed.stderr
+assert confirmed_content == "Provider plan smoke\n"
+'@
+$scriptPath = Join-Path $env:TEMP ('dev-agent-provider-plan-smoke-harness-' + [System.Guid]::NewGuid().ToString('N') + '.py')
+[System.IO.File]::WriteAllText($scriptPath, $script, [System.Text.UTF8Encoding]::new($false))
+python $scriptPath
 ```
 
 Expected:
@@ -555,6 +616,10 @@ Expected:
 - Preview command exits 0, includes `preview_changes`, does not create `.agent`, and does not write `docs/provider-smoke.md`.
 - Unconfirmed apply exits 2 and does not write `docs/provider-smoke.md`.
 - Confirmed apply exits 0 and writes `docs/provider-smoke.md`.
+
+Note: Windows PowerShell 5.1 may strip JSON double quotes when passing `ConvertTo-Json`
+output directly to a native command. The smoke uses Python `subprocess.run([...])`
+so the provider plan is passed as one argv value without shell re-quoting.
 
 - [ ] **Step 4: Check final git status and recent commits**
 
