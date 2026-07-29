@@ -197,6 +197,42 @@ def test_run_previews_plan_file_without_apply(tmp_path: Path) -> None:
     assert not (tmp_path / "docs" / "preview.md").exists()
 
 
+def test_run_accepts_plan_file_with_utf8_bom(tmp_path: Path) -> None:
+    plan_file = tmp_path / "plan.json"
+    plan_file.write_text(
+        "\ufeff"
+        + json.dumps(
+            {
+                "summary": "BOM 计划",
+                "operations": [
+                    {
+                        "action": "create_text",
+                        "path": "docs/bom.md",
+                        "content": "兼容 Windows UTF-8 BOM\n",
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_cli(
+        tmp_path,
+        "run",
+        "读取 BOM 计划",
+        "--fake-response",
+        "计划：兼容 BOM。",
+        "--plan-file",
+        str(plan_file),
+    )
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["planned_changes"][0]["path"] == "docs/bom.md"
+    assert payload["applied_changes"] == []
+
+
 def test_run_apply_requires_plan_file(tmp_path: Path) -> None:
     result = run_cli(
         tmp_path,
