@@ -642,3 +642,19 @@ def test_recent_records_include_expandable_detail_markup(tmp_path):
     assert "下一步建议" in html
     assert "人工备注" in html
     assert "需要复核安装步骤" in html
+
+
+def test_static_app_js_contains_record_detail_hooks(tmp_path):
+    app = create_app(storage_path=tmp_path / "analyses.jsonl")
+    client = TestClient(app)
+
+    response = client.get("/static/app.js")
+
+    assert response.status_code == 200
+    script = response.text
+    assert "bindRecordDetails" in script
+    assert "toggleRecordDetail" in script
+    assert "recordDetailHtml" in script
+    assert "data-record-detail-toggle" in script
+    assert "aria-expanded" in script
+    assert "收起详情" in script

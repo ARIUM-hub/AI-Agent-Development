@@ -38,6 +38,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadRecordsSummary();
   bindFilteredExport();
   bindRecordFilters();
+  bindRecordDetails(document);
 });
 
 function bindTabs() {
@@ -285,8 +286,10 @@ function prependRecentRecord(payload) {
       <span>${labelFor("evidence", attribution.evidence_strength)}</span>
     </div>
     <p>${escapeHtml(analysis.report)}</p>
+    ${recordDetailHtml(payload.record_id, analysis)}
   `;
   list.prepend(article);
+  bindRecordDetails(article);
   applyRecordFilters();
 }
 
@@ -439,6 +442,75 @@ function buildFilteredExportUrl() {
 
   const queryString = params.toString();
   return queryString ? `/api/records/export.csv?${queryString}` : "/api/records/export.csv";
+}
+
+function bindRecordDetails(root = document) {
+  root.querySelectorAll("[data-record-detail-toggle]").forEach((button) => {
+    if (button.dataset.bound === "true") {
+      return;
+    }
+    button.dataset.bound = "true";
+    button.addEventListener("click", () => toggleRecordDetail(button));
+  });
+}
+
+function toggleRecordDetail(button) {
+  const detailId = button.getAttribute("aria-controls");
+  const detail = detailId ? document.getElementById(detailId) : null;
+  if (!detail) {
+    return;
+  }
+
+  const expanded = button.getAttribute("aria-expanded") === "true";
+  button.setAttribute("aria-expanded", String(!expanded));
+  button.textContent = expanded ? "查看详情" : "收起详情";
+  detail.hidden = expanded;
+}
+
+function recordDetailHtml(recordId, analysis, feedback = null) {
+  const attribution = analysis.attribution;
+  const feedbackStatus = feedback ? (feedback.accepted ? "已认可" : "已修正") : "未复核";
+  const feedbackNote = feedback?.note || "暂无信息";
+  const detailId = `record-detail-${recordId}`;
+
+  return `
+    <button
+      class="record-detail-toggle secondary-action"
+      type="button"
+      data-record-detail-toggle
+      aria-expanded="false"
+      aria-controls="${escapeHtml(detailId)}"
+    >查看详情</button>
+    <div id="${escapeHtml(detailId)}" class="record-detail" hidden>
+      <dl class="record-detail-grid">
+        ${recordDetailRow("客户问题", attribution.customer_problem)}
+        ${recordDetailRow("问题类型", labelFor("issue_category", attribution.issue_category))}
+        ${recordDetailRow("业务原因", listText((attribution.root_causes || []).map((item) => labelFor("rootCause", item))))}
+        ${recordDetailRow("优先责任方", labelFor("responsibility", attribution.primary_responsibility))}
+        ${recordDetailRow("证据强度", labelFor("evidence", attribution.evidence_strength))}
+        ${recordDetailRow("下一步建议", listText(attribution.recommended_actions))}
+        ${recordDetailRow("需要补充信息", listText(attribution.missing_information))}
+        ${recordDetailRow("人工复核", feedbackStatus)}
+        ${recordDetailRow("人工备注", feedbackNote)}
+      </dl>
+    </div>
+  `;
+}
+
+function recordDetailRow(label, value) {
+  return `
+    <div>
+      <dt>${escapeHtml(label)}</dt>
+      <dd>${escapeHtml(value || "暂无信息")}</dd>
+    </div>
+  `;
+}
+
+function listText(value) {
+  if (!Array.isArray(value)) {
+    return value || "暂无信息";
+  }
+  return value.filter(Boolean).join("；") || "暂无信息";
 }
 
 function bindRecordFilters() {
