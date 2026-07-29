@@ -69,7 +69,13 @@ def build_history_payload(repo_root: Path) -> dict[str, object]:
     return {"tasks": [task.to_dict() for task in tasks]}
 
 
-def run_dry_run_task(repo_root: Path, home_dir: Path, request_text: str, fake_response: str) -> dict[str, object]:
+def run_dry_run_task(
+    repo_root: Path,
+    home_dir: Path,
+    request_text: str,
+    fake_response: str,
+    execution_plan_payload: dict[str, object] | None = None,
+) -> dict[str, object]:
     if not request_text.strip():
         raise ValueError("request_text is required")
     if not fake_response.strip():
@@ -81,7 +87,7 @@ def run_dry_run_task(repo_root: Path, home_dir: Path, request_text: str, fake_re
     )
     result = runner.run(
         request_text,
-        TaskRunOptions(dry_run=True, run_verification=False),
+        TaskRunOptions(dry_run=True, run_verification=False, apply_changes=False),
     )
     return {
         "task_id": result.task_id,
@@ -90,4 +96,8 @@ def run_dry_run_task(repo_root: Path, home_dir: Path, request_text: str, fake_re
         "memory_hit_count": result.memory_hit_count,
         "verification_steps": result.verification_steps,
         "events": result.events,
+        "planned_changes": [],
+        "applied_changes": [],
+        "diff_stat": "",
+        "execution_error": None,
     }
