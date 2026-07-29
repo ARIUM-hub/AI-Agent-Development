@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi import FastAPI, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse
@@ -10,7 +11,7 @@ from pydantic import ValidationError
 
 from customer_issue_agent.attribution import analyze_attribution
 from customer_issue_agent.domain import AnalysisRequest, AnalysisResult
-from customer_issue_agent.ingestion import extract_conversation_text
+from customer_issue_agent.ingestion import extract_batch_conversation_texts, extract_conversation_text
 from customer_issue_agent.parser import parse_conversation
 from customer_issue_agent.report import build_report
 from customer_issue_agent.storage import AnalysisStore
@@ -51,6 +52,47 @@ def create_app(storage_path: Path | None = None) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return _run_analysis(store, platform=platform, conversation_text=text)
+
+    @app.post("/api/analyze-batch-file")
+    async def analyze_batch_file(
+        platform: str = Form(default="Other overseas platform"),
+        file: UploadFile | None = None,
+    ) -> dict:
+        if file is None:
+            raise HTTPException(status_code=422, detail="请上传批量客服会话文件")
+        content = await file.read()
+        try:
+            conversations = extract_batch_conversation_texts(file.filename or "batch.txt", content)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        records = [
+            _run_analysis(store, platform=platform, conversation_text=conversation)
+            for conversation in conversations
+        ]
+        return {"batch_id": str(uuid4()), "count": len(records), "records": records}
+
+    @app.post("/api/records/{record_id}/feedback")
+    async def save_feedback(
+        record_id: str,
+        accepted: bool = Form(default=True),
+        corrected_issue_category: str = Form(default=""),
+        corrected_responsibility: str = Form(default=""),
+        note: str = Form(default=""),
+    ) -> dict:
+        try:
+            feedback = store.save_feedback(
+                record_id,
+                {
+                    "accepted": accepted,
+                    "corrected_issue_category": corrected_issue_category,
+                    "corrected_responsibility": corrected_responsibility,
+                    "note": note,
+                },
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="记录不存在或已被清理，请刷新页面后重试") from exc
+        return {"record_id": record_id, "feedback": feedback}
 
     return app
 

@@ -150,3 +150,65 @@ def test_styles_cover_enhanced_workbench_components(tmp_path):
     assert ".result-card" in css
     assert ".form-message.is-visible" in css
     assert "@media (max-width: 720px)" in css
+
+
+def test_analyze_batch_file_returns_multiple_records(tmp_path):
+    app = create_app(storage_path=tmp_path / "analyses.jsonl")
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/analyze-batch-file",
+        data={"platform": "Other overseas platform"},
+        files={
+            "file": (
+                "batch.txt",
+                "Customer: It will not connect\n\n---\n\nCustomer: Missing cable",
+                "text/plain",
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["batch_id"]
+    assert payload["count"] == 2
+    assert len(payload["records"]) == 2
+    assert payload["records"][0]["record_id"]
+    assert payload["records"][1]["analysis"]["request"]["platform"] == "Other overseas platform"
+
+
+def test_feedback_endpoint_updates_record_feedback(tmp_path):
+    app = create_app(storage_path=tmp_path / "analyses.jsonl")
+    client = TestClient(app)
+    analysis_response = client.post(
+        "/api/analyze",
+        data={"platform": "Other", "conversation_text": "Customer: not working"},
+    )
+    record_id = analysis_response.json()["record_id"]
+
+    response = client.post(
+        f"/api/records/{record_id}/feedback",
+        data={
+            "accepted": "false",
+            "corrected_issue_category": "product_fault",
+            "corrected_responsibility": "supply_chain_quality",
+            "note": "需要质量团队复核。",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["record_id"] == record_id
+    assert payload["feedback"]["accepted"] is False
+    assert payload["feedback"]["corrected_issue_category"] == "product_fault"
+    assert payload["feedback"]["corrected_responsibility"] == "supply_chain_quality"
+    assert payload["feedback"]["note"] == "需要质量团队复核。"
+
+
+def test_feedback_endpoint_returns_404_for_missing_record(tmp_path):
+    app = create_app(storage_path=tmp_path / "analyses.jsonl")
+    client = TestClient(app)
+
+    response = client.post("/api/records/missing/feedback", data={"accepted": "true"})
+
+    assert response.status_code == 404
