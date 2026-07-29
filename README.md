@@ -18,6 +18,8 @@ python -m uvicorn customer_issue_agent.app:create_app --factory --reload
 - `粘贴会话`：选择平台来源，粘贴单条客服会话，然后点击“分析会话”。
 - `上传文件`：选择平台来源，上传 `txt`、`log`、`csv`、`xlsx` 或 `xlsm` 文件，然后点击“上传并分析”。
 
+平台来源输入框提供 Amazon、TikTok Shop、Shopee、Walmart Marketplace、eBay、Shopify、AliExpress、Lazada、Temu、Shein 等常用海外电商平台预设；也可以直接输入其他海外电商平台名称。
+
 分析完成后，页面会直接显示客户问题、业务原因、优先责任方、下一步建议和需要补充的信息。最近记录会保留最近 10 条分析摘要。
 
 ## 安全约束
