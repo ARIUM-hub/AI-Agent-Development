@@ -5,6 +5,8 @@ import sys
 
 from dev_agent import __version__
 from dev_agent.encoding import UTF8, utf8_environment_hint, write_text_utf8
+from dev_agent.memory.retriever import MemoryRetriever
+from dev_agent.memory.store import MemoryStore
 from dev_agent.project.scanner import scan_project
 
 
@@ -65,6 +67,19 @@ def scan_command(args: Namespace) -> int:
     return 0
 
 
+def history_command(args: Namespace) -> int:
+    store = MemoryStore(Path.cwd())
+    tasks = store.list_tasks()
+    experiences = store.list_experiences()
+    if args.query:
+        hits = MemoryRetriever(tasks, experiences).search(args.query)
+        payload = {"hits": [hit.__dict__ for hit in hits]}
+    else:
+        payload = {"tasks": [task.to_dict() for task in tasks]}
+    sys.stdout.write(_json(payload))
+    return 0
+
+
 def build_parser() -> ArgumentParser:
     parser = ArgumentParser(prog="dev-agent")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -77,6 +92,10 @@ def build_parser() -> ArgumentParser:
 
     scan_parser = subparsers.add_parser("scan")
     scan_parser.set_defaults(handler=scan_command)
+
+    history_parser = subparsers.add_parser("history")
+    history_parser.add_argument("--query")
+    history_parser.set_defaults(handler=history_command)
 
     return parser
 
