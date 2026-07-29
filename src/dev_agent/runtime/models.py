@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 
 from dev_agent.config.models import ProjectConfig, UserPreferences
+from dev_agent.execution.models import ExecutionPlan
 from dev_agent.memory.models import MemoryHit
 from dev_agent.project.scanner import ProjectScan
 from dev_agent.tools.git import GitSnapshot
@@ -24,6 +25,8 @@ class RuntimeContext:
 class TaskRunOptions:
     dry_run: bool = True
     run_verification: bool = False
+    apply_changes: bool = False
+    execution_plan: ExecutionPlan | None = None
 
 
 @dataclass(frozen=True)
@@ -35,3 +38,7 @@ class TaskRunResult:
     verification_steps: list[list[str]]
     verification_result: VerificationResult | None = None
     events: list[str] = field(default_factory=list)
+    planned_changes: list[dict[str, object]] = field(default_factory=list)
+    applied_changes: list[dict[str, object]] = field(default_factory=list)
+    diff_stat: str = ""
+    execution_error: str | None = None

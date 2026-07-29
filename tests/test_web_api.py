@@ -69,3 +69,28 @@ def test_run_dry_run_task_requires_fake_response_and_records_history(tmp_path) -
     assert payload["verification_steps"] == [["python", "-m", "pytest"]]
     history = (tmp_path / ".agent" / "history" / "tasks.jsonl").read_text(encoding="utf-8")
     assert "生成实现计划" in history
+
+
+def test_web_dry_run_does_not_apply_execution_plan_payload(tmp_path) -> None:
+    write_text_utf8(tmp_path / "pyproject.toml", "[project]\nname = \"sample\"\n")
+
+    payload = run_dry_run_task(
+        repo_root=tmp_path,
+        home_dir=tmp_path,
+        request_text="尝试通过 Web 写文件",
+        fake_response="计划：Web 只允许 dry-run。",
+        execution_plan_payload={
+            "summary": "不应执行",
+            "operations": [
+                {
+                    "action": "create_text",
+                    "path": "docs/from-web.md",
+                    "content": "不应写入\n",
+                }
+            ],
+        },
+    )
+
+    assert payload["dry_run"] is True
+    assert payload["applied_changes"] == []
+    assert not (tmp_path / "docs" / "from-web.md").exists()

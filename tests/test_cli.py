@@ -121,3 +121,143 @@ def test_serve_check_outputs_local_url(tmp_path: Path) -> None:
     assert payload["host"] == "127.0.0.1"
     assert isinstance(payload["port"], int)
     assert payload["url"].startswith("http://127.0.0.1:")
+
+
+def test_run_applies_plan_file_and_reports_changes(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = \"sample\"\n", encoding="utf-8")
+    plan_file = tmp_path / "plan.json"
+    plan_file.write_text(
+        json.dumps(
+            {
+                "summary": "创建说明",
+                "operations": [
+                    {
+                        "action": "create_text",
+                        "path": "docs/execution.md",
+                        "content": "执行闭环\n",
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_cli(
+        tmp_path,
+        "run",
+        "创建说明",
+        "--fake-response",
+        "计划：创建说明文件。",
+        "--plan-file",
+        str(plan_file),
+        "--apply",
+    )
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["execution_error"] is None
+    assert payload["applied_changes"][0]["path"] == "docs/execution.md"
+    assert (tmp_path / "docs" / "execution.md").read_text(encoding="utf-8") == "执行闭环\n"
+
+
+def test_run_previews_plan_file_without_apply(tmp_path: Path) -> None:
+    plan_file = tmp_path / "plan.json"
+    plan_file.write_text(
+        json.dumps(
+            {
+                "summary": "预览说明",
+                "operations": [
+                    {
+                        "action": "create_text",
+                        "path": "docs/preview.md",
+                        "content": "只预览\n",
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_cli(
+        tmp_path,
+        "run",
+        "预览计划",
+        "--fake-response",
+        "计划：只预览。",
+        "--plan-file",
+        str(plan_file),
+    )
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["planned_changes"][0]["path"] == "docs/preview.md"
+    assert payload["applied_changes"] == []
+    assert not (tmp_path / "docs" / "preview.md").exists()
+
+
+def test_run_accepts_plan_file_with_utf8_bom(tmp_path: Path) -> None:
+    plan_file = tmp_path / "plan.json"
+    plan_file.write_text(
+        "\ufeff"
+        + json.dumps(
+            {
+                "summary": "BOM 计划",
+                "operations": [
+                    {
+                        "action": "create_text",
+                        "path": "docs/bom.md",
+                        "content": "兼容 Windows UTF-8 BOM\n",
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_cli(
+        tmp_path,
+        "run",
+        "读取 BOM 计划",
+        "--fake-response",
+        "计划：兼容 BOM。",
+        "--plan-file",
+        str(plan_file),
+    )
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["planned_changes"][0]["path"] == "docs/bom.md"
+    assert payload["applied_changes"] == []
+
+
+def test_run_apply_requires_plan_file(tmp_path: Path) -> None:
+    result = run_cli(
+        tmp_path,
+        "run",
+        "缺少计划",
+        "--fake-response",
+        "计划：失败。",
+        "--apply",
+    )
+
+    assert result.returncode == 2
+    assert "--plan-file is required when --apply is used" in result.stderr
+
+
+def test_run_reports_missing_plan_file_as_cli_error(tmp_path: Path) -> None:
+    result = run_cli(
+        tmp_path,
+        "run",
+        "缺少计划文件",
+        "--fake-response",
+        "计划：失败。",
+        "--plan-file",
+        str(tmp_path / "missing.json"),
+        "--apply",
+    )
+
+    assert result.returncode == 2
+    assert "无法读取执行计划" in result.stderr
