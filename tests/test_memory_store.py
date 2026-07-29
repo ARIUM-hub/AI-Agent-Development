@@ -1,5 +1,6 @@
 from dev_agent.memory.models import TaskRecord
 from dev_agent.memory.store import MemoryStore
+from dev_agent.memory.extract import extract_experiences
 
 
 def test_memory_store_appends_and_lists_task_records(tmp_path) -> None:
@@ -31,3 +32,27 @@ def test_memory_store_gets_task_by_id(tmp_path) -> None:
 
     assert loaded is not None
     assert loaded.title == "第二项"
+
+
+def test_extract_experiences_from_task_lessons() -> None:
+    record = TaskRecord(
+        task_id="task-1",
+        title="修复编码",
+        status="passed",
+        lessons=["Windows 子进程需要显式 UTF-8 环境。", "提交前必须运行完整测试。"],
+    )
+
+    experiences = extract_experiences(record)
+
+    assert [item.text for item in experiences] == [
+        "Windows 子进程需要显式 UTF-8 环境。",
+        "提交前必须运行完整测试。",
+    ]
+    assert experiences[0].source_task_id == "task-1"
+    assert "修复编码" in experiences[0].tags
+
+
+def test_extract_experiences_ignores_empty_lessons() -> None:
+    record = TaskRecord(task_id="task-1", title="空任务", status="passed", lessons=["", "  "])
+
+    assert extract_experiences(record) == []
