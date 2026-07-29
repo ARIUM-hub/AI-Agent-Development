@@ -145,8 +145,8 @@ def _confirm_apply(args: Namespace) -> bool:
 
 
 def run_command(args: Namespace) -> int:
-    if args.apply and args.plan_file is None:
-        sys.stderr.write("--plan-file is required when --apply is used\n")
+    if args.apply and args.plan_file is None and not args.use_provider_plan:
+        sys.stderr.write("--plan-file or --use-provider-plan is required when --apply is used\n")
         return 2
     try:
         execution_plan = _resolve_execution_plan(args)
