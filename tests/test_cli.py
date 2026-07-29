@@ -44,6 +44,8 @@ def test_doctor_outputs_json(tmp_path: Path) -> None:
         "command_executor": True,
         "git_reader": True,
         "verification_runner": True,
+        "runtime_context": True,
+        "local_task_runner": True,
     }
 
 
@@ -86,3 +88,24 @@ def test_history_searches_memory(tmp_path: Path) -> None:
     assert result.returncode == 0
     payload = json.loads(result.stdout)
     assert payload["hits"][0]["record_id"] == "task-1"
+
+
+def test_run_uses_fake_response_and_records_history(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = \"sample\"\n", encoding="utf-8")
+
+    result = run_cli(
+        tmp_path,
+        "run",
+        "实现 history 查询",
+        "--fake-response",
+        "计划：读取文件并运行测试。",
+        "--dry-run",
+    )
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["plan_text"] == "计划：读取文件并运行测试。"
+    assert payload["dry_run"] is True
+    assert payload["verification_steps"] == [["python", "-m", "pytest"]]
+    history = (tmp_path / ".agent" / "history" / "tasks.jsonl").read_text(encoding="utf-8")
+    assert "实现 history 查询" in history
