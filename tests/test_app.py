@@ -396,3 +396,45 @@ def test_records_summary_endpoint_returns_empty_summary(tmp_path):
     assert payload["reviewed_records"] == 0
     assert payload["corrected_records"] == 0
     assert payload["issue_categories"] == []
+
+
+def test_index_contains_summary_dashboard_region(tmp_path):
+    app = create_app(storage_path=tmp_path / "analyses.jsonl")
+    client = TestClient(app)
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    html = response.text
+    assert 'id="records-summary"' in html
+    assert 'id="summary-content"' in html
+    assert "运营概览" in html
+    assert "概览加载中..." in html
+
+
+def test_static_app_js_contains_summary_dashboard_hooks(tmp_path):
+    app = create_app(storage_path=tmp_path / "analyses.jsonl")
+    client = TestClient(app)
+
+    response = client.get("/static/app.js")
+
+    assert response.status_code == 200
+    script = response.text
+    assert "loadRecordsSummary" in script
+    assert "renderRecordsSummary" in script
+    assert "summaryMetric" in script
+    assert "summaryDistribution" in script
+
+
+def test_styles_cover_summary_dashboard_components(tmp_path):
+    app = create_app(storage_path=tmp_path / "analyses.jsonl")
+    client = TestClient(app)
+
+    response = client.get("/static/styles.css")
+
+    assert response.status_code == 200
+    css = response.text
+    assert ".summary-dashboard" in css
+    assert ".summary-metrics" in css
+    assert ".summary-card" in css
+    assert ".distribution-list" in css

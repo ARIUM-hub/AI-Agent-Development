@@ -402,8 +402,77 @@ textarea:focus-visible {
   color: var(--accent-strong);
 }
 
+.summary-dashboard {
+  margin-top: 24px;
+}
+
+.summary-loading,
+.summary-error {
+  margin-top: 16px;
+  color: var(--muted);
+}
+
+.summary-metrics,
+.summary-grid {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.summary-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.summary-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+  background: #fbfcf8;
+}
+
+.summary-card span {
+  color: var(--muted);
+}
+
+.summary-card strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 28px;
+}
+
+.distribution-card strong {
+  margin-top: 0;
+  font-size: 16px;
+}
+
+.distribution-list {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  margin: 14px 0 0;
+  list-style: none;
+}
+
+.distribution-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
 @media (max-width: 900px) {
   .workspace-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-metrics,
+  .summary-grid {
     grid-template-columns: 1fr;
   }
 

@@ -21,6 +21,11 @@ const labels = {
     likely: "倾向于",
     insufficient: "信息不足",
   },
+  feedback: {
+    unreviewed: "未复核",
+    accepted: "已认可",
+    corrected: "已修正",
+  },
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -29,6 +34,7 @@ document.addEventListener("DOMContentLoaded", () => {
   bindAnalysisForm("upload-form", "upload-error");
   bindBatchForm();
   bindFeedbackForms(document);
+  loadRecordsSummary();
   bindRecordFilters();
 });
 
@@ -311,6 +317,72 @@ function rootCauseLabel(value) {
     non_usage_issue: "非产品使用问题",
   };
   return rootCauses[value] || value || "未知";
+}
+
+async function loadRecordsSummary() {
+  const container = document.getElementById("summary-content");
+  if (!container) {
+    return;
+  }
+
+  try {
+    const response = await fetch("/api/records/summary");
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(readError(payload));
+    }
+    renderRecordsSummary(payload);
+  } catch (error) {
+    container.innerHTML = `<p class="summary-error">${escapeHtml(error.message || "概览加载失败，请刷新页面重试。")}</p>`;
+  }
+}
+
+function renderRecordsSummary(summary) {
+  const container = document.getElementById("summary-content");
+  if (!container) {
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="summary-metrics">
+      ${summaryMetric("总记录数", summary.total_records)}
+      ${summaryMetric("已复核", summary.reviewed_records)}
+      ${summaryMetric("已修正", summary.corrected_records)}
+    </div>
+    <div class="summary-grid">
+      ${summaryDistribution("问题类型", "issue_category", summary.issue_categories)}
+      ${summaryDistribution("责任方", "responsibility", summary.responsibilities)}
+      ${summaryDistribution("证据强度", "evidence", summary.evidence_strengths)}
+      ${summaryDistribution("复核状态", "feedback", summary.feedback_statuses)}
+    </div>
+  `;
+}
+
+function summaryMetric(label, value) {
+  return `
+    <article class="summary-card">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </article>
+  `;
+}
+
+function summaryDistribution(title, labelGroup, items = []) {
+  const rows = items.length
+    ? items.map((item) => `
+        <li>
+          <span>${escapeHtml(labelFor(labelGroup, item.value))}</span>
+          <strong>${escapeHtml(item.count)}</strong>
+        </li>
+      `).join("")
+    : `<li><span>暂无数据</span><strong>0</strong></li>`;
+
+  return `
+    <article class="summary-card distribution-card">
+      <h3>${escapeHtml(title)}</h3>
+      <ul class="distribution-list">${rows}</ul>
+    </article>
+  `;
 }
 
 function bindRecordFilters() {
