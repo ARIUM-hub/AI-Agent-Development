@@ -11,6 +11,7 @@ from dev_agent.project.scanner import scan_project
 from dev_agent.providers.base import FakeProvider
 from dev_agent.runtime.models import TaskRunOptions
 from dev_agent.runtime.runner import LocalTaskRunner
+from dev_agent.web.server import create_server
 
 
 def _json(data: dict[str, object]) -> str:
@@ -49,6 +50,7 @@ def doctor_command(args: Namespace) -> int:
             "verification_runner": True,
             "runtime_context": True,
             "local_task_runner": True,
+            "web_console": True,
         },
     }
     sys.stdout.write(_json(payload))
@@ -108,6 +110,34 @@ def run_command(args: Namespace) -> int:
     return 0
 
 
+def serve_command(args: Namespace) -> int:
+    server = create_server(
+        repo_root=Path.cwd(),
+        home_dir=Path.home(),
+        host=args.host,
+        port=args.port,
+    )
+    host, port = server.server_address
+    payload = {
+        "ok": True,
+        "host": host,
+        "port": port,
+        "url": f"http://{host}:{port}/",
+    }
+    if args.check:
+        server.server_close()
+        sys.stdout.write(_json(payload))
+        return 0
+    sys.stdout.write(_json(payload))
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        return 0
+    finally:
+        server.server_close()
+    return 0
+
+
 def build_parser() -> ArgumentParser:
     parser = ArgumentParser(prog="dev-agent")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -131,6 +161,12 @@ def build_parser() -> ArgumentParser:
     run_parser.add_argument("--dry-run", action="store_true", default=True)
     run_parser.add_argument("--verify", action="store_true")
     run_parser.set_defaults(handler=run_command)
+
+    serve_parser = subparsers.add_parser("serve")
+    serve_parser.add_argument("--host", default="127.0.0.1")
+    serve_parser.add_argument("--port", type=int, default=8765)
+    serve_parser.add_argument("--check", action="store_true")
+    serve_parser.set_defaults(handler=serve_command)
 
     return parser
 

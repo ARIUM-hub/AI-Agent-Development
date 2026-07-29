@@ -46,6 +46,7 @@ def test_doctor_outputs_json(tmp_path: Path) -> None:
         "verification_runner": True,
         "runtime_context": True,
         "local_task_runner": True,
+        "web_console": True,
     }
 
 
@@ -109,3 +110,14 @@ def test_run_uses_fake_response_and_records_history(tmp_path: Path) -> None:
     assert payload["verification_steps"] == [["python", "-m", "pytest"]]
     history = (tmp_path / ".agent" / "history" / "tasks.jsonl").read_text(encoding="utf-8")
     assert "实现 history 查询" in history
+
+
+def test_serve_check_outputs_local_url(tmp_path: Path) -> None:
+    result = run_cli(tmp_path, "serve", "--host", "127.0.0.1", "--port", "0", "--check")
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is True
+    assert payload["host"] == "127.0.0.1"
+    assert isinstance(payload["port"], int)
+    assert payload["url"].startswith("http://127.0.0.1:")
