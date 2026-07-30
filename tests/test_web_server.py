@@ -5,6 +5,8 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from dev_agent.encoding import write_text_utf8
+from dev_agent.memory.models import TaskRecord
+from dev_agent.memory.store import MemoryStore
 from dev_agent.web.server import create_server
 
 
@@ -87,6 +89,17 @@ def test_context_route_returns_project_context(tmp_path) -> None:
 
 
 def test_history_route_returns_json(tmp_path) -> None:
+    MemoryStore(tmp_path).append_task(
+        TaskRecord(
+            task_id="task-history-1",
+            title="修复中文乱码",
+            status="passed",
+            summary="UTF-8 修复",
+            events=["runtime_started", "runtime_completed"],
+            verification=["python -m pytest -v"],
+            lessons=["提交前运行完整测试"],
+        )
+    )
     server, base_url = start_server(tmp_path)
     try:
         status, content_type, payload = get_json(f"{base_url}/api/history")
@@ -96,7 +109,13 @@ def test_history_route_returns_json(tmp_path) -> None:
 
     assert status == HTTPStatus.OK
     assert content_type == "application/json; charset=utf-8"
-    assert payload["tasks"] == []
+    assert payload["tasks"][0]["task_id"] == "task-history-1"
+    assert payload["tasks"][0]["title"] == "修复中文乱码"
+    assert payload["tasks"][0]["status"] == "passed"
+    assert payload["tasks"][0]["summary"] == "UTF-8 修复"
+    assert payload["tasks"][0]["events"] == ["runtime_started", "runtime_completed"]
+    assert payload["tasks"][0]["verification"] == ["python -m pytest -v"]
+    assert payload["tasks"][0]["lessons"] == ["提交前运行完整测试"]
 
 
 def test_run_route_rejects_missing_fake_response(tmp_path) -> None:
