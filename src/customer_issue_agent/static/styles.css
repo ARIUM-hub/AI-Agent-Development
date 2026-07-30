@@ -501,6 +501,22 @@ textarea:focus-visible {
   padding-top: 10px;
 }
 
+.summary-filter-link {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+}
+
+.summary-filter-link:hover,
+.summary-filter-link:focus-visible {
+  text-decoration: underline;
+}
+
 @media (max-width: 900px) {
   .workspace-grid {
     grid-template-columns: 1fr;

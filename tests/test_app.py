@@ -455,6 +455,7 @@ def test_styles_cover_summary_dashboard_components(tmp_path):
     assert ".summary-metrics" in css
     assert ".summary-card" in css
     assert ".distribution-list" in css
+    assert ".summary-filter-link" in css
 
 
 def test_export_records_csv_endpoint_filters_by_query_params(tmp_path):
