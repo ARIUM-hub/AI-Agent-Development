@@ -163,3 +163,38 @@ def test_preview_provider_plan_task_rejects_dangerous_path_without_writing(tmp_p
         )
 
     assert not (tmp_path.parent / "escape.md").exists()
+
+
+def test_apply_provider_plan_task_writes_file_and_records_history(tmp_path) -> None:
+    write_text_utf8(tmp_path / "pyproject.toml", "[project]\nname = \"sample\"\n")
+
+    payload = apply_provider_plan_task(
+        repo_root=tmp_path,
+        home_dir=tmp_path,
+        request_text="确认 Web provider plan",
+        fake_response=provider_plan_json(content="确认写入\n"),
+    )
+
+    assert payload["ok"] is True
+    assert payload["dry_run"] is False
+    assert payload["task_id"]
+    assert payload["preview_changes"][0]["risk"] == "create"
+    assert payload["applied_changes"][0]["path"] == "docs/from-web-provider.md"
+    assert (tmp_path / "docs" / "from-web-provider.md").read_text(encoding="utf-8") == "确认写入\n"
+    history = (tmp_path / ".agent" / "history" / "tasks.jsonl").read_text(encoding="utf-8")
+    assert "确认 Web provider plan" in history
+
+
+def test_apply_provider_plan_task_rechecks_preview_before_writing(tmp_path) -> None:
+    write_text_utf8(tmp_path / "docs" / "from-web-provider.md", "已存在\n")
+
+    with pytest.raises(ValueError, match="执行计划预览失败"):
+        apply_provider_plan_task(
+            repo_root=tmp_path,
+            home_dir=tmp_path,
+            request_text="确认 Web provider plan",
+            fake_response=provider_plan_json(),
+        )
+
+    assert (tmp_path / "docs" / "from-web-provider.md").read_text(encoding="utf-8") == "已存在\n"
+    assert not (tmp_path / ".agent").exists()

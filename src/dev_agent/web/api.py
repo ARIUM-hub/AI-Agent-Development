@@ -136,7 +136,36 @@ def apply_provider_plan_task(
     request_text: str,
     fake_response: str,
 ) -> dict[str, object]:
-    raise NotImplementedError("provider plan apply is implemented in Task 2")
+    if not request_text.strip():
+        raise ValueError("request_text is required")
+    if not fake_response.strip():
+        raise ValueError("fake_response is required for provider plan apply")
+    plan, preview = _provider_preview(repo_root, fake_response)
+    runner = LocalTaskRunner(
+        repo_root=repo_root,
+        home_dir=home_dir,
+        provider=FakeProvider(name="fake-web-provider-plan", responses=[fake_response]),
+    )
+    result = runner.run(
+        request_text,
+        TaskRunOptions(
+            dry_run=False,
+            run_verification=False,
+            apply_changes=True,
+            execution_plan=plan,
+        ),
+    )
+    return _provider_plan_payload(
+        ok=True,
+        task_id=result.task_id,
+        plan_text=result.plan_text,
+        dry_run=result.dry_run,
+        planned_changes=result.planned_changes,
+        preview_result=preview,
+        applied_changes=result.applied_changes,
+        diff_stat=result.diff_stat,
+        execution_error=result.execution_error,
+    )
 
 
 def run_dry_run_task(

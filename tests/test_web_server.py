@@ -40,6 +40,25 @@ def get_text(url):
         return response.status, response.headers["Content-Type"], response.read().decode("utf-8")
 
 
+def provider_plan_payload(path="docs/from-web-route.md", content="来自 Web route\n"):
+    return {
+        "request": "Web provider route",
+        "fake_response": json.dumps(
+            {
+                "summary": "创建 Web route 文件",
+                "operations": [
+                    {
+                        "action": "create_text",
+                        "path": path,
+                        "content": content,
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+    }
+
+
 def test_health_route_returns_json(tmp_path) -> None:
     server, base_url = start_server(tmp_path)
     try:
@@ -124,3 +143,61 @@ def test_static_assets_include_console_interactions(tmp_path) -> None:
     assert js_type == "text/javascript; charset=utf-8"
     assert "loadContext" in js_body
     assert "submitRun" in js_body
+
+
+def test_provider_plan_preview_route_returns_preview_without_writing(tmp_path) -> None:
+    write_text_utf8(tmp_path / "pyproject.toml", "[project]\nname = \"sample\"\n")
+    server, base_url = start_server(tmp_path)
+    try:
+        status, content_type, payload = post_json(
+            f"{base_url}/api/provider-plan/preview",
+            provider_plan_payload(),
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert status == HTTPStatus.OK
+    assert content_type == "application/json; charset=utf-8"
+    assert payload["ok"] is True
+    assert payload["preview_changes"][0]["path"] == "docs/from-web-route.md"
+    assert not (tmp_path / "docs" / "from-web-route.md").exists()
+    assert not (tmp_path / ".agent").exists()
+
+
+def test_provider_plan_apply_route_writes_file_and_records_history(tmp_path) -> None:
+    write_text_utf8(tmp_path / "pyproject.toml", "[project]\nname = \"sample\"\n")
+    server, base_url = start_server(tmp_path)
+    try:
+        status, content_type, payload = post_json(
+            f"{base_url}/api/provider-plan/apply",
+            provider_plan_payload(content="确认 route 写入\n"),
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert status == HTTPStatus.OK
+    assert content_type == "application/json; charset=utf-8"
+    assert payload["ok"] is True
+    assert payload["applied_changes"][0]["path"] == "docs/from-web-route.md"
+    assert (tmp_path / "docs" / "from-web-route.md").read_text(encoding="utf-8") == "确认 route 写入\n"
+    history = (tmp_path / ".agent" / "history" / "tasks.jsonl").read_text(encoding="utf-8")
+    assert "Web provider route" in history
+
+
+def test_provider_plan_preview_route_rejects_bad_json(tmp_path) -> None:
+    server, base_url = start_server(tmp_path)
+    try:
+        status, content_type, payload = post_json(
+            f"{base_url}/api/provider-plan/preview",
+            {"request": "坏 Web provider route", "fake_response": '{"summary":'},
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert status == HTTPStatus.BAD_REQUEST
+    assert content_type == "application/json; charset=utf-8"
+    assert payload["ok"] is False
+    assert "无法解析 provider 执行计划" in payload["error"]

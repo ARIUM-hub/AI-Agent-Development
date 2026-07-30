@@ -4,7 +4,14 @@ import json
 from pathlib import Path
 from urllib.parse import urlparse
 
-from dev_agent.web.api import build_context_payload, build_health_payload, build_history_payload, run_dry_run_task
+from dev_agent.web.api import (
+    apply_provider_plan_task,
+    build_context_payload,
+    build_health_payload,
+    build_history_payload,
+    preview_provider_plan_task,
+    run_dry_run_task,
+)
 
 
 STATIC_DIR = Path(__file__).with_name("static")
@@ -35,6 +42,23 @@ class DevAgentHttpHandler(SimpleHTTPRequestHandler):
             elif path == "/api/run" and self.command == "POST":
                 body = self._read_json_body()
                 payload = run_dry_run_task(
+                    repo_root=self.repo_root,
+                    home_dir=self.home_dir,
+                    request_text=str(body.get("request", "")),
+                    fake_response=str(body.get("fake_response", "")),
+                )
+                self._send_json(HTTPStatus.OK, payload)
+            elif path == "/api/provider-plan/preview" and self.command == "POST":
+                body = self._read_json_body()
+                payload = preview_provider_plan_task(
+                    repo_root=self.repo_root,
+                    request_text=str(body.get("request", "")),
+                    fake_response=str(body.get("fake_response", "")),
+                )
+                self._send_json(HTTPStatus.OK, payload)
+            elif path == "/api/provider-plan/apply" and self.command == "POST":
+                body = self._read_json_body()
+                payload = apply_provider_plan_task(
                     repo_root=self.repo_root,
                     home_dir=self.home_dir,
                     request_text=str(body.get("request", "")),
