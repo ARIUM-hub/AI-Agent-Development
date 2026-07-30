@@ -315,6 +315,118 @@ button:disabled {
   background: rgba(255, 244, 214, 0.88);
 }
 
+.audit-card-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.audit-card {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.52);
+  box-shadow: 0 12px 28px rgba(31, 45, 33, 0.08);
+}
+
+.audit-card.audit-success {
+  border-color: rgba(82, 107, 74, 0.34);
+  background: rgba(238, 247, 231, 0.74);
+}
+
+.audit-card.audit-failed {
+  border-color: rgba(154, 55, 45, 0.36);
+  background: rgba(255, 238, 232, 0.86);
+}
+
+.audit-card.audit-neutral {
+  border-color: rgba(64, 112, 111, 0.28);
+  background: rgba(244, 248, 248, 0.72);
+}
+
+.audit-card.risk-create {
+  border-color: rgba(82, 107, 74, 0.34);
+  background: rgba(238, 247, 231, 0.68);
+}
+
+.audit-card.risk-overwrite {
+  border-color: rgba(201, 112, 74, 0.46);
+  background: rgba(255, 244, 232, 0.84);
+}
+
+.audit-card.risk-append,
+.audit-card.risk-append-create {
+  border-color: rgba(64, 112, 111, 0.34);
+  background: rgba(235, 247, 244, 0.72);
+}
+
+.audit-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.audit-card-header h4 {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.audit-status-badge {
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 10px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.64);
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.audit-status-badge.audit-success {
+  color: #2f5b2d;
+  background: rgba(229, 244, 218, 0.9);
+}
+
+.audit-status-badge.audit-failed {
+  color: #7a251d;
+  background: rgba(255, 223, 216, 0.95);
+}
+
+.audit-status-badge.audit-neutral {
+  color: #285f5a;
+  background: rgba(222, 244, 240, 0.95);
+}
+
+.audit-meta,
+.audit-error {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.audit-meta {
+  margin: 8px 0 0;
+}
+
+.audit-error {
+  margin-top: 10px;
+  border-radius: 12px;
+  padding: 9px 10px;
+  color: #7a251d;
+  background: rgba(255, 238, 232, 0.86);
+}
+
+.audit-diff {
+  min-height: auto;
+  margin-top: 10px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 .danger {
   margin: 12px 0 0;
   border: 1px solid rgba(154, 55, 45, 0.36);
@@ -375,7 +487,8 @@ button:disabled {
     flex-direction: column;
   }
 
-  .preview-card-header {
+  .preview-card-header,
+  .audit-card-header {
     flex-direction: column;
   }
 

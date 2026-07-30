@@ -42,6 +42,7 @@ const providerApplyButton = () => document.getElementById("confirm-provider-appl
 const providerStatus = () => document.getElementById("provider-status");
 const providerError = () => document.getElementById("provider-error");
 const providerPreviewCards = () => document.getElementById("provider-preview-cards");
+const providerAuditCards = () => document.getElementById("provider-audit-cards");
 
 const providerRiskLabel = (risk) => {
   if (risk === "create") {
@@ -92,6 +93,15 @@ const clearProviderError = () => {
 
 const clearProviderPreviewCards = () => {
   providerPreviewCards().replaceChildren();
+};
+
+const clearProviderAuditCards = () => {
+  providerAuditCards().replaceChildren();
+};
+
+const previewChangeAt = (payload, index) => {
+  const changes = Array.isArray(payload.preview_changes) ? payload.preview_changes : [];
+  return changes[index] || {};
 };
 
 const appendText = (parent, className, text) => {
@@ -153,7 +163,125 @@ const renderProviderPreviewCards = (payload) => {
   });
 };
 
+const renderProviderAuditFailure = (message) => {
+  clearProviderAuditCards();
+  const card = document.createElement("article");
+  card.className = "audit-card audit-failed";
+
+  const header = document.createElement("div");
+  header.className = "audit-card-header";
+  const title = document.createElement("h4");
+  title.textContent = "执行失败";
+  const badge = document.createElement("span");
+  badge.className = "audit-status-badge audit-failed";
+  badge.textContent = "失败";
+  header.append(title, badge);
+
+  const error = document.createElement("div");
+  error.className = "audit-error";
+  error.textContent = message || "执行请求失败，请查看错误提示或原始 JSON。";
+
+  card.append(header, error);
+  providerAuditCards().appendChild(card);
+};
+
+const renderProviderAuditCards = (payload) => {
+  clearProviderAuditCards();
+  const appliedChanges = Array.isArray(payload.applied_changes) ? payload.applied_changes : [];
+  const previewChanges = Array.isArray(payload.preview_changes) ? payload.preview_changes : [];
+  const hasExecutionError = typeof payload.execution_error === "string" && payload.execution_error.length > 0;
+
+  const summary = document.createElement("article");
+  summary.className = `audit-card ${hasExecutionError ? "audit-failed" : "audit-success"}`;
+  const summaryHeader = document.createElement("div");
+  summaryHeader.className = "audit-card-header";
+  const summaryTitle = document.createElement("h4");
+  summaryTitle.textContent = hasExecutionError ? "执行失败" : "执行完成";
+  const summaryBadge = document.createElement("span");
+  summaryBadge.className = `audit-status-badge ${hasExecutionError ? "audit-failed" : "audit-success"}`;
+  summaryBadge.textContent = hasExecutionError ? "失败" : "成功";
+  summaryHeader.append(summaryTitle, summaryBadge);
+
+  const summaryMeta = document.createElement("p");
+  summaryMeta.className = "audit-meta";
+  summaryMeta.textContent = `已应用 ${appliedChanges.length} 项变更 · 计划 ${previewChanges.length} 项预览变更 · 历史已刷新`;
+  summary.append(summaryHeader, summaryMeta);
+  if (hasExecutionError) {
+    appendText(summary, "audit-error", payload.execution_error);
+  }
+  providerAuditCards().appendChild(summary);
+
+  if (appliedChanges.length === 0) {
+    appendText(providerAuditCards(), "preview-empty-state", "没有实际应用变更记录。");
+  }
+
+  appliedChanges.forEach((change, index) => {
+    const previewChange = previewChangeAt(payload, index);
+    const riskClass = providerRiskClass(previewChange.risk);
+    const card = document.createElement("article");
+    card.className = `audit-card ${riskClass}`;
+
+    const header = document.createElement("div");
+    header.className = "audit-card-header";
+    const path = document.createElement("h4");
+    path.textContent = change.path || previewChange.path || "未命名路径";
+    const badge = document.createElement("span");
+    badge.className = `risk-badge ${riskClass}`;
+    badge.textContent = providerRiskLabel(previewChange.risk || change.action);
+    header.append(path, badge);
+
+    const meta = document.createElement("p");
+    meta.className = "audit-meta";
+    const action = change.action || "未知动作";
+    const bytes = Number.isFinite(change.content_bytes) ? `${change.content_bytes} bytes` : "未知 bytes";
+    const targetState = typeof previewChange.exists === "boolean"
+      ? (previewChange.exists ? "执行前目标已存在" : "执行前目标不存在")
+      : "执行前目标状态未知";
+    meta.textContent = `${action} · 写入 ${bytes} · ${targetState}`;
+
+    const previewLabel = document.createElement("div");
+    previewLabel.className = "preview-content-label";
+    previewLabel.textContent = "已审阅内容片段";
+
+    const preview = document.createElement("pre");
+    preview.className = "content-preview";
+    if (typeof previewChange.content_preview === "string") {
+      preview.textContent = previewChange.content_preview === "" ? "内容为空" : previewChange.content_preview;
+    } else {
+      preview.textContent = "此执行结果没有可读内容片段，请查看原始 JSON。";
+    }
+
+    card.append(header, meta, previewLabel, preview);
+    if (previewChange.content_preview_truncated === true) {
+      appendText(card, "truncation-note", "内容片段已截断，请查看原始 JSON 或缩小计划后重新预览。");
+    }
+    providerAuditCards().appendChild(card);
+  });
+
+  const diff = document.createElement("article");
+  diff.className = "audit-card audit-neutral";
+  const diffHeader = document.createElement("div");
+  diffHeader.className = "audit-card-header";
+  const diffTitle = document.createElement("h4");
+  diffTitle.textContent = "Git diff 摘要";
+  const diffBadge = document.createElement("span");
+  diffBadge.className = "audit-status-badge audit-neutral";
+  diffBadge.textContent = "diff";
+  diffHeader.append(diffTitle, diffBadge);
+
+  const diffBody = document.createElement("pre");
+  diffBody.className = "audit-diff";
+  if (typeof payload.diff_stat === "string") {
+    diffBody.textContent = payload.diff_stat === "" ? "没有 Git diff 摘要。" : payload.diff_stat;
+  } else {
+    diffBody.textContent = "此执行结果没有 Git diff 摘要字段。";
+  }
+  diff.append(diffHeader, diffBody);
+  providerAuditCards().appendChild(diff);
+};
+
 const resetProviderPreview = () => {
+  clearProviderAuditCards();
   if (lastProviderPreview === null) {
     return;
   }
@@ -181,6 +309,7 @@ async function submitProviderPreview(event) {
   const form = event.currentTarget;
   clearProviderError();
   clearProviderPreviewCards();
+  clearProviderAuditCards();
   lastProviderPreview = null;
   providerStatus().textContent = "正在生成预览";
   renderJson("provider-apply-result", "确认执行后显示结果。");
@@ -196,6 +325,7 @@ async function submitProviderPreview(event) {
     providerStatus().textContent = "预览通过，可以确认执行";
   } catch (error) {
     clearProviderPreviewCards();
+    clearProviderAuditCards();
     renderJson("provider-preview-result", "预览失败。");
     providerStatus().textContent = "预览失败";
     showProviderError(error.message);
@@ -214,12 +344,14 @@ async function submitProviderApply() {
       request: form.elements.request.value,
       fake_response: form.elements.fake_response.value,
     });
+    renderProviderAuditCards(payload);
     renderJson("provider-apply-result", payload);
     providerStatus().textContent = payload.execution_error ? "执行失败" : "执行完成";
     clearProviderPreviewCards();
     lastProviderPreview = null;
     await loadHistory();
   } catch (error) {
+    renderProviderAuditFailure(error.message);
     renderJson("provider-apply-result", "执行失败。");
     providerStatus().textContent = "执行失败";
     clearProviderPreviewCards();

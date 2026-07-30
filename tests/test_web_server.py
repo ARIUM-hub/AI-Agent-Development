@@ -142,7 +142,9 @@ def test_static_assets_include_console_interactions(tmp_path) -> None:
     assert "provider-plan-form" in index_body
     assert "confirm-provider-apply" in index_body
     assert "provider-preview-cards" in index_body
+    assert "provider-audit-cards" in index_body
     assert "原始 JSON" in index_body
+    assert "执行结果 JSON" in index_body
     assert css_status == HTTPStatus.OK
     assert css_type == "text/css; charset=utf-8"
     assert "--ink" in css_body
@@ -155,6 +157,12 @@ def test_static_assets_include_console_interactions(tmp_path) -> None:
     assert ".risk-overwrite" in css_body
     assert ".content-preview" in css_body
     assert ".truncation-note" in css_body
+    assert ".audit-card-list" in css_body
+    assert ".audit-card" in css_body
+    assert ".audit-status-badge" in css_body
+    assert ".audit-success" in css_body
+    assert ".audit-failed" in css_body
+    assert ".audit-diff" in css_body
     assert "overflow-wrap: anywhere" in css_body
     assert js_status == HTTPStatus.OK
     assert js_type == "text/javascript; charset=utf-8"
@@ -170,10 +178,20 @@ def test_static_assets_include_console_interactions(tmp_path) -> None:
     assert "providerPreviewCards" in js_body
     assert "renderProviderPreviewCards" in js_body
     assert "clearProviderPreviewCards" in js_body
+    assert "providerAuditCards" in js_body
+    assert "renderProviderAuditCards" in js_body
+    assert "renderProviderAuditFailure" in js_body
+    assert "clearProviderAuditCards" in js_body
     assert "providerRiskLabel" in js_body
     assert "providerRiskClass" in js_body
+    assert "execution_error" in js_body
+    assert "applied_changes" in js_body
     assert "content_preview_truncated" in js_body
     assert "textContent" in js_body
+    reset_index = js_body.index("const resetProviderPreview")
+    audit_clear_index = js_body.index("clearProviderAuditCards();", reset_index)
+    stale_preview_guard_index = js_body.index("if (lastProviderPreview === null)", reset_index)
+    assert audit_clear_index < stale_preview_guard_index
 
 
 def test_provider_plan_preview_route_returns_preview_without_writing(tmp_path) -> None:
