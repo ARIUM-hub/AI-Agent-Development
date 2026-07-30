@@ -194,6 +194,12 @@ def test_static_assets_include_console_interactions(tmp_path) -> None:
     assert index_status == HTTPStatus.OK
     assert index_type == "text/html; charset=utf-8"
     assert "Provider plan 审批" in index_body
+    assert 'id="context-cards"' in index_body
+    assert 'class="context-card-list"' in index_body
+    assert '<h3 class="result-heading">原始 JSON</h3>' in index_body
+    context_cards_index = index_body.index('id="context-cards"')
+    context_json_index = index_body.index('id="context"')
+    assert context_cards_index < context_json_index
     assert "history-cards" in index_body
     assert "历史 JSON" in index_body
     assert "provider-plan-form" in index_body
