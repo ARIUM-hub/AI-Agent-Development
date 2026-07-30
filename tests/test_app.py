@@ -308,6 +308,9 @@ def test_index_contains_recent_record_filter_controls(tmp_path):
     html = response.text
     assert 'id="record-filter"' in html
     assert 'id="record-search"' in html
+    assert 'id="platform-filter"' in html
+    assert 'name="platform"' in html
+    assert 'id="platform-filter" name="platform" list="platform-presets"' in html
     assert 'id="issue-filter"' in html
     assert 'id="responsibility-filter"' in html
     assert 'id="feedback-filter"' in html
