@@ -77,8 +77,8 @@ GET /api/context
   },
   "verification_steps": [
     {
-      "name": "测试",
-      "command": "python -m pytest"
+      "name": "test",
+      "command": ["python", "-m", "pytest"]
     }
   ]
 }
@@ -129,6 +129,8 @@ Git 状态卡
 ### 验证命令
 
 - 优先展示 `verification_steps` 中名称和命令均有效的条目。
+- `verification_steps[].command` 兼容参数数组和字符串；参数数组转换为以空格分隔的可读命令文本，包含空白的参数保留双引号包裹。
+- `verification_steps[].name` 中的 `test`、`lint`、`typecheck` 和 `build` 分别显示为“测试”“代码检查”“类型检查”和“构建”；其他名称安全显示原文。
 - `verification_steps` 为空时，回退展示 `scan.suggested_commands` 中非空的 `test`、`lint`、`typecheck` 和 `build`。
 - 回退命令使用“测试”“代码检查”“类型检查”“构建”作为标签。
 - 同一命令只展示一次，保持原始顺序。
@@ -154,7 +156,7 @@ Git 状态卡
 - 新增 `clearContextCards()`。
 - 新增 `renderContextCards(payload)`，负责调度各区块渲染。
 - 新增小型 DOM helper，分别渲染标签、空态、Git 文本和命令行。
-- 新增命令归一化 helper，按既定优先级选择并去重验证命令。
+- 新增命令归一化 helper，兼容字符串和参数数组，并按既定优先级选择、格式化及去重验证命令。
 - 修改 `loadContext()`：只请求一次 payload，先调用 `renderContextCards(payload)`，再调用 `renderJson("context", payload)`。
 
 `src/dev_agent/web/static/styles.css`：
