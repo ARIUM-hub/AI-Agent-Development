@@ -102,7 +102,7 @@ Git 状态卡
 在 `<pre id="context">` 前新增：
 
 ```html
-<div id="context-cards" class="context-card-list" aria-live="polite"></div>
+<div id="context-cards" class="context-card-list"></div>
 <h3 class="result-heading">原始 JSON</h3>
 ```
 
@@ -129,7 +129,7 @@ Git 状态卡
 ### 验证命令
 
 - 优先展示 `verification_steps` 中名称和命令均有效的条目。
-- `verification_steps[].command` 兼容参数数组和字符串；参数数组按 PowerShell 规则转换为可复制文本。安全 token 原样保留，其他 token 使用单引号并将内部单引号加倍；可执行文件需要引用时添加调用运算符 `&`。
+- `verification_steps[].command` 兼容参数数组和字符串；参数数组转换为 Windows PowerShell 可执行文本。可执行文件使用调用运算符 `&`，参数区使用 `--%` 停止 PowerShell 重解析，并按 Windows 原生程序的命令行引号规则编码每个参数。
 - `verification_steps[].name` 中的 `test`、`lint`、`typecheck` 和 `build` 分别显示为“测试”“代码检查”“类型检查”和“构建”；其他名称安全显示原文。
 - `verification_steps` 为空时，回退展示 `scan.suggested_commands` 中非空的 `test`、`lint`、`typecheck` 和 `build`。
 - 回退命令使用“测试”“代码检查”“类型检查”“构建”作为标签。
@@ -188,7 +188,7 @@ Git 状态卡
 
 ## 可访问性与响应式
 
-- `context-cards` 使用 `aria-live="polite"`。
+- `context-cards` 不设置 live region，避免与命令行内独立的状态节点发生嵌套播报。
 - Git 状态同时包含文字和颜色。
 - 复制控件使用语义化按钮，并保留清晰的键盘焦点。
 - 规则详情使用原生 `<details>` 和 `<summary>`。
@@ -205,7 +205,7 @@ Git 状态卡
 - 断言 CSS 包含主要上下文卡片、Git 状态和命令行选择器。
 - 继续断言动态内容使用 `textContent`。
 - 验证 `/api/context` 仍返回项目、偏好、规则、扫描、Git 和验证步骤字段。
-- 使用 Node 内建测试实际执行命令格式化、无效名称回退、命令去重、恶意文本 DOM 渲染以及剪贴板成功和失败分支；pytest 负责调用该测试，Node 不可用时明确跳过。
+- 使用 Node 内建测试实际执行命令格式化、无效名称回退、命令去重、恶意文本 DOM 渲染以及剪贴板成功和失败分支；Windows 下额外通过 `powershell.exe` 调用临时 Node 探针，逐项比较原生程序收到的 `argv`。pytest 负责调用该测试，Node 不可用时明确跳过。
 - 覆盖空字段或缺失字段不会破坏 payload 契约的后端行为，并通过本地浏览器验收 375px 布局。
 
 人工验收：

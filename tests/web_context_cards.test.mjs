@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
 import vm from "node:vm";
 
@@ -79,8 +82,11 @@ const loadContextApi = ({ writeText = async () => {} } = {}) => {
 test("formats command arrays as runnable PowerShell text", () => {
   const { api } = loadContextApi();
 
-  assert.equal(api.formatContextCommand(["python", "-m", "pytest"]), "python -m pytest");
-  assert.equal(api.formatContextCommand(["python", ""]), "python ''");
+  assert.equal(
+    api.formatContextCommand(["python", "-m", "pytest"]),
+    "& 'python' --% -m pytest",
+  );
+  assert.equal(api.formatContextCommand(["python", ""]), "& 'python' --% \"\"");
   assert.equal(
     api.formatContextCommand([
       "C:\\Program Files\\Python\\python.exe",
@@ -89,10 +95,44 @@ test("formats command arrays as runnable PowerShell text", () => {
       'say "hi"',
       "tab\tvalue",
     ]),
-    "& 'C:\\Program Files\\Python\\python.exe' 'C:\\work tree\\tests' " +
-      "'O''Brien' 'say \"hi\"' 'tab\tvalue'",
+    "& 'C:\\Program Files\\Python\\python.exe' --% " +
+      '"C:\\work tree\\tests" O\'Brien "say \\"hi\\"" "tab\tvalue"',
   );
 });
+
+test(
+  "round-trips command arguments through Windows PowerShell",
+  { skip: process.platform !== "win32" },
+  () => {
+    const { api } = loadContextApi();
+    const probeDirectory = mkdtempSync(join(tmpdir(), "dev agent argv "));
+    const probePath = join(probeDirectory, "argv probe.mjs");
+    const expected = [
+      "",
+      "space value",
+      'say "hi"',
+      "ends-with\\",
+      "space-end \\",
+      "O'Brien",
+      "tab\tvalue",
+    ];
+    writeFileSync(probePath, "console.log(JSON.stringify(process.argv.slice(2)));\n", "utf8");
+
+    try {
+      const command = api.formatContextCommand([process.execPath, probePath, ...expected]);
+      const completed = spawnSync(
+        "powershell.exe",
+        ["-NoProfile", "-Command", command],
+        { encoding: "utf8", windowsHide: true },
+      );
+      assert.equal(completed.status, 0, completed.stderr || completed.stdout);
+      const output = completed.stdout.trim().split(/\r?\n/).at(-1);
+      assert.deepEqual(JSON.parse(output), expected);
+    } finally {
+      rmSync(probeDirectory, { force: true, recursive: true });
+    }
+  },
+);
 
 test("falls back to suggested commands when verification step names are invalid", () => {
   const { api } = loadContextApi();
@@ -118,7 +158,7 @@ test("deduplicates valid verification commands", () => {
 
   assert.equal(commands.length, 1);
   assert.equal(commands[0].label, "测试");
-  assert.equal(commands[0].command, "python -m pytest");
+  assert.equal(commands[0].command, "& 'python' --% -m pytest");
 });
 
 test("renders hostile and missing payload values as text", () => {

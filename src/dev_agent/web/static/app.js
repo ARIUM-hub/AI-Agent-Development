@@ -49,10 +49,28 @@ const contextCommandLabel = (name) => {
 
 const formatContextCommandPart = (part) => {
   const text = String(part);
-  if (/^[A-Za-z0-9_./:\\-]+$/.test(text)) {
+  if (text !== "" && !/[\s\"]/.test(text)) {
     return text;
   }
-  return `'${text.replaceAll("'", "''")}'`;
+  let formatted = '"';
+  let backslashes = 0;
+  for (const character of text) {
+    if (character === "\\") {
+      backslashes += 1;
+      continue;
+    }
+    if (character === '"') {
+      formatted += "\\".repeat(backslashes * 2 + 1);
+      formatted += '"';
+      backslashes = 0;
+      continue;
+    }
+    formatted += "\\".repeat(backslashes);
+    formatted += character;
+    backslashes = 0;
+  }
+  formatted += "\\".repeat(backslashes * 2);
+  return `${formatted}"`;
 };
 
 const formatContextCommand = (command) => {
@@ -68,9 +86,12 @@ const formatContextCommand = (command) => {
   if (parts.length === 0) {
     return "";
   }
-  const formatted = parts.map(formatContextCommandPart);
-  const callOperator = formatted[0] === parts[0] ? "" : "& ";
-  return `${callOperator}${formatted.join(" ")}`;
+  const executable = `'${parts[0].replaceAll("'", "''")}'`;
+  if (parts.length === 1) {
+    return `& ${executable}`;
+  }
+  const argumentsText = parts.slice(1).map(formatContextCommandPart).join(" ");
+  return `& ${executable} --% ${argumentsText}`;
 };
 
 const collectContextCommands = (payload) => {

@@ -201,6 +201,7 @@ def test_static_assets_include_console_interactions(tmp_path) -> None:
     assert "Provider plan 审批" in index_body
     assert 'id="context-cards"' in index_body
     assert 'class="context-card-list"' in index_body
+    assert '<div id="context-cards" class="context-card-list"></div>' in index_body
     assert '<h3 class="result-heading">原始 JSON</h3>' in index_body
     context_cards_index = index_body.index('id="context-cards"')
     context_json_index = index_body.index('id="context"')

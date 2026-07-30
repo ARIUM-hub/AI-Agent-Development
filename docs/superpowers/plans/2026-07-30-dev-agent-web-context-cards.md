@@ -176,7 +176,7 @@ with:
 ```html
         <article class="panel">
           <h2>上下文</h2>
-          <div id="context-cards" class="context-card-list" aria-live="polite"></div>
+          <div id="context-cards" class="context-card-list"></div>
           <h3 class="result-heading">原始 JSON</h3>
           <pre id="context">加载中...</pre>
         </article>
@@ -1009,8 +1009,9 @@ docs: design web context cards
 
 代码审查后增加以下约束，执行时以本节为准：
 
-- 参数数组按 PowerShell 规则格式化，不使用 `JSON.stringify` 生成 Shell 文本。
-- 安全 token 原样保留；其他 token 使用单引号，内部单引号写成两个单引号；首个 token 需要引用时添加 `&`。
+- 参数数组按 Windows PowerShell 和 Windows 原生程序参数规则格式化，不使用 `JSON.stringify` 生成 Shell 文本。
+- 可执行文件使用调用运算符 `&`；参数区使用 `--%` 停止 PowerShell 重解析，再按 Windows CRT 引号算法编码空参数、空白、双引号和尾部反斜杠。
 - `verification_steps` 的名称和命令必须同时有效，否则回退到 `scan.suggested_commands`。
 - 每条复制按钮配套独立的 `role="status"` live region，播报成功和失败并在复位时清空。
-- `tests/test_web_server.py` 调用 `tests/web_context_cards.test.mjs`，以 Node 内建测试执行上述行为，并覆盖恶意文本只能通过 `textContent` 呈现。
+- `tests/test_web_server.py` 调用 `tests/web_context_cards.test.mjs`，以 Node 内建测试执行上述行为，并覆盖恶意文本只能通过 `textContent` 呈现；Windows 下使用临时 Node 探针对 PowerShell 命令执行真实 `argv` 往返验证。
+- 外层 `context-cards` 不设置 live region，只保留命令行内独立的 `role="status"` 节点，避免重复播报。
