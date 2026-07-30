@@ -241,6 +241,10 @@ def test_run_preview_outputs_preview_changes_without_writing(tmp_path: Path) -> 
             "exists": False,
             "content_bytes": len("预览中文\n".encode("utf-8")),
             "risk": "create",
+            "content_preview": "预览中文\n",
+            "content_preview_truncated": False,
+            "content_preview_line_count": 1,
+            "content_preview_char_count": len("预览中文\n"),
         }
     ]
     assert payload["applied_changes"] == []
@@ -415,6 +419,10 @@ def test_run_use_provider_plan_previews_provider_json_without_side_effects(tmp_p
     assert payload["task_id"] is None
     assert payload["planned_changes"][0]["path"] == "docs/provider.md"
     assert payload["preview_changes"][0]["risk"] == "create"
+    assert payload["preview_changes"][0]["content_preview"] == "来自 provider\n"
+    assert payload["preview_changes"][0]["content_preview_truncated"] is False
+    assert payload["preview_changes"][0]["content_preview_line_count"] == 1
+    assert payload["preview_changes"][0]["content_preview_char_count"] == len("来自 provider\n")
     assert payload["applied_changes"] == []
     assert not (tmp_path / ".agent").exists()
     assert not (tmp_path / "docs" / "provider.md").exists()
