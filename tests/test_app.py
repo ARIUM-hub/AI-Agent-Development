@@ -314,6 +314,10 @@ def test_index_contains_recent_record_filter_controls(tmp_path):
     assert 'id="issue-filter"' in html
     assert 'id="responsibility-filter"' in html
     assert 'id="feedback-filter"' in html
+    assert "只看待复核" in html
+    assert 'data-review-queue-toggle' in html
+    assert 'class="secondary-action review-queue-toggle"' in html
+    assert 'aria-pressed="false"' in html
     assert 'id="filter-count"' in html
     assert 'id="filter-empty"' in html
     assert 'data-filter-reset' in html
