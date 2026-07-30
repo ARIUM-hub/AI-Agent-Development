@@ -1,8 +1,13 @@
 import json
 from http import HTTPStatus
+from pathlib import Path
+import shutil
+import subprocess
 import threading
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
+
+import pytest
 
 from dev_agent.encoding import write_text_utf8
 from dev_agent.memory.models import TaskRecord
@@ -212,6 +217,8 @@ def test_static_assets_include_console_interactions(tmp_path) -> None:
     assert css_type == "text/css; charset=utf-8"
     assert "--ink" in css_body
     assert "@media" in css_body
+    panel_block = css_body.split(".panel {", maxsplit=1)[1].split("}", maxsplit=1)[0]
+    assert "min-width: 0;" in panel_block
     assert ".approval-layout" in css_body
     assert ".danger" in css_body
     assert ".preview-card-list" in css_body
@@ -240,6 +247,7 @@ def test_static_assets_include_console_interactions(tmp_path) -> None:
     assert ".context-status-badge" in css_body
     assert ".context-command-row" in css_body
     assert ".context-copy-button" in css_body
+    assert ".context-copy-status" in css_body
     assert ".context-rule-detail" in css_body
     assert "overflow-wrap: anywhere" in css_body
     assert js_status == HTTPStatus.OK
@@ -255,6 +263,7 @@ def test_static_assets_include_console_interactions(tmp_path) -> None:
     assert "navigator.clipboard.writeText(command)" in js_body
     assert 'button.textContent = "已复制"' in js_body
     assert 'button.textContent = "复制失败"' in js_body
+    assert 'status.setAttribute("role", "status")' in js_body
     load_context_index = js_body.index("async function loadContext")
     render_context_index = js_body.index("renderContextCards(payload)", load_context_index)
     context_json_index = js_body.index('renderJson("context", payload)', load_context_index)
@@ -294,6 +303,23 @@ def test_static_assets_include_console_interactions(tmp_path) -> None:
     audit_clear_index = js_body.index("clearProviderAuditCards();", reset_index)
     stale_preview_guard_index = js_body.index("if (lastProviderPreview === null)", reset_index)
     assert audit_clear_index < stale_preview_guard_index
+
+
+def test_web_context_card_javascript_behaviors() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Node.js is required for Web JavaScript behavior tests")
+
+    test_file = Path(__file__).with_name("web_context_cards.test.mjs")
+    completed = subprocess.run(
+        [node, "--test", str(test_file)],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
 
 
 def test_provider_plan_preview_route_returns_preview_without_writing(tmp_path) -> None:

@@ -15,6 +15,8 @@
 - Modify: `tests/test_web_server.py`
   - 扩展 `/api/context` 契约测试，保护项目、偏好、规则、扫描、Git 和验证步骤字段。
   - 扩展静态资源测试，保护 context cards 容器、渲染 helper、剪贴板反馈、CSS class 和 raw JSON 顺序。
+- Create: `tests/web_context_cards.test.mjs`
+  - 使用 Node 内建测试直接执行上下文命令格式化、字段回退、去重、安全 DOM 渲染及剪贴板双分支。
 - Modify: `src/dev_agent/web/static/index.html`
   - 在 `<pre id="context">` 前新增 `context-cards` 容器和“原始 JSON”标题。
 - Modify: `src/dev_agent/web/static/app.js`
@@ -1002,3 +1004,13 @@ docs: design web context cards
 **Type consistency:** The plan uses the current payload names `project`, `preferences`, `rules_text`, `scan`, `git`, and `verification_steps`. It treats `verification_steps[].command` as the existing `list[str]` shape while accepting a string for defensive compatibility. New functions are consistently named `contextCards`, `clearContextCards`, `contextObject`, `contextText`, `contextValues`, `contextCommandLabel`, `formatContextCommand`, `collectContextCommands`, `copyContextCommand`, `buildContextProjectCard`, `buildContextGitCard`, `buildContextCommandsCard`, `buildContextSupportCard`, and `renderContextCards`.
 
 **Scope control:** The plan modifies only existing Web static assets and tests. It adds no backend routes, schema changes, dependencies, command execution, Git writes, provider calls, supplier probing, background agents, pressure tests, or destructive behavior.
+
+## Post-Review Hardening
+
+代码审查后增加以下约束，执行时以本节为准：
+
+- 参数数组按 PowerShell 规则格式化，不使用 `JSON.stringify` 生成 Shell 文本。
+- 安全 token 原样保留；其他 token 使用单引号，内部单引号写成两个单引号；首个 token 需要引用时添加 `&`。
+- `verification_steps` 的名称和命令必须同时有效，否则回退到 `scan.suggested_commands`。
+- 每条复制按钮配套独立的 `role="status"` live region，播报成功和失败并在复位时清空。
+- `tests/test_web_server.py` 调用 `tests/web_context_cards.test.mjs`，以 Node 内建测试执行上述行为，并覆盖恶意文本只能通过 `textContent` 呈现。

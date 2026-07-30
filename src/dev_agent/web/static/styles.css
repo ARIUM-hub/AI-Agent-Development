@@ -75,6 +75,7 @@ h1 {
 }
 
 .panel {
+  min-width: 0;
   min-height: 260px;
   padding: 22px;
   border: 1px solid var(--line);
@@ -389,6 +390,16 @@ button:disabled {
   margin: 0;
   padding: 8px 12px;
   font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.context-copy-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
   white-space: nowrap;
 }
 

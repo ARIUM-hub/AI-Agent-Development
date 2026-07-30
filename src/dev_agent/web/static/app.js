@@ -49,10 +49,10 @@ const contextCommandLabel = (name) => {
 
 const formatContextCommandPart = (part) => {
   const text = String(part);
-  if (text === "" || /[\s\"]/.test(text)) {
-    return JSON.stringify(text);
+  if (/^[A-Za-z0-9_./:\\-]+$/.test(text)) {
+    return text;
   }
-  return text;
+  return `'${text.replaceAll("'", "''")}'`;
 };
 
 const formatContextCommand = (command) => {
@@ -62,11 +62,15 @@ const formatContextCommand = (command) => {
   if (!Array.isArray(command)) {
     return "";
   }
-  return command
+  const parts = command
     .filter((part) => typeof part === "string" || typeof part === "number")
-    .map(formatContextCommandPart)
-    .join(" ")
-    .trim();
+    .map((part) => String(part));
+  if (parts.length === 0) {
+    return "";
+  }
+  const formatted = parts.map(formatContextCommandPart);
+  const callOperator = formatted[0] === parts[0] ? "" : "& ";
+  return `${callOperator}${formatted.join(" ")}`;
 };
 
 const collectContextCommands = (payload) => {
@@ -75,12 +79,13 @@ const collectContextCommands = (payload) => {
   let candidates = steps
     .map((step) => {
       const item = contextObject(step);
+      const name = typeof item.name === "string" ? item.name.trim() : "";
       return {
-        label: contextCommandLabel(item.name),
-        command: formatContextCommand(item.command),
+        label: name === "" ? "" : contextCommandLabel(name),
+        command: name === "" ? "" : formatContextCommand(item.command),
       };
     })
-    .filter((item) => item.command !== "");
+    .filter((item) => item.label !== "" && item.command !== "");
 
   if (candidates.length === 0) {
     const scan = contextObject(source.scan);
@@ -103,16 +108,21 @@ const collectContextCommands = (payload) => {
   });
 };
 
-const copyContextCommand = async (button, command) => {
+const copyContextCommand = async (button, status, command) => {
   try {
     await navigator.clipboard.writeText(command);
     button.textContent = "已复制";
+    status.textContent = "命令已复制";
   } catch (_error) {
     button.textContent = "复制失败";
+    status.textContent = "命令复制失败";
   }
   window.setTimeout(() => {
     if (button.isConnected) {
       button.textContent = "一键复制";
+    }
+    if (status.isConnected) {
+      status.textContent = "";
     }
   }, 1600);
 };
@@ -246,8 +256,13 @@ const buildContextCommandsCard = (payload) => {
       button.className = "context-copy-button";
       button.textContent = "一键复制";
       button.setAttribute("aria-label", `复制${label}命令`);
-      button.addEventListener("click", () => copyContextCommand(button, command));
-      row.append(main, button);
+      const status = document.createElement("span");
+      status.className = "context-copy-status";
+      status.setAttribute("role", "status");
+      status.setAttribute("aria-live", "polite");
+      status.setAttribute("aria-atomic", "true");
+      button.addEventListener("click", () => copyContextCommand(button, status, command));
+      row.append(main, button, status);
       list.appendChild(row);
     });
   }
