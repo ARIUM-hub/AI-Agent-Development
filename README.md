@@ -8,7 +8,7 @@
 powershell -ExecutionPolicy Bypass -File .\scripts\register-local-service-task.ps1
 ```
 
-注册后，任务会在当前用户登录时自动启动本地服务，并固定监听 `http://localhost:58623`。
+注册后，任务会在当前用户登录时自动启动本地服务，并固定监听 `http://localhost:58623`。如果登录时首次启动失败，计划任务会按有限次数失败后自动重试，默认最多重试 3 次、每次间隔 1 分钟。
 
 如果你刚注册完，想立刻手动启动一次，可以执行：
 
@@ -17,6 +17,14 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-local-service.ps1
 ```
 
 如果后续切换到了新的 worktree，建议在新 worktree 里重新执行一次注册脚本，让计划任务指向新的代码路径。
+
+如果后续遇到无法访问，可以先执行一键修复：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\repair-local-service.ps1
+```
+
+这个脚本会检查计划任务是否存在、服务健康接口是否可达，并在必要时调用启动脚本重新拉起服务。
 
 移除计划任务：
 

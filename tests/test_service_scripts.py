@@ -53,9 +53,30 @@ def test_register_task_script_dry_run_reports_task_configuration():
     assert "start-local-service.ps1" in completed.stdout
 
 
+def test_register_task_script_dry_run_reports_retry_configuration():
+    completed = _run_powershell_script("register-local-service-task.ps1", "-DryRun")
+
+    assert completed.returncode == 0
+    assert "RESTART_COUNT=3" in completed.stdout
+    assert "RESTART_INTERVAL=00:01:00" in completed.stdout
+
+
+def test_repair_service_script_dry_run_reports_diagnostics_and_repair_intent():
+    completed = _run_powershell_script("repair-local-service.ps1", "-DryRun")
+
+    assert completed.returncode == 0
+    assert "TASK_NAME=CustomerIssueAgentLocalService" in completed.stdout
+    assert "HEALTHCHECK_URL=http://127.0.0.1:58623/api/records/summary" in completed.stdout
+    assert "TASK_ACTION=verify_scheduled_task" in completed.stdout
+    assert "TASK_ACTION=verify_service_health" in completed.stdout
+    assert "TASK_ACTION=repair_via_start_script" in completed.stdout
+
+
 def test_readme_documents_local_service_workflow():
     readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
 
     assert "register-local-service-task.ps1" in readme
     assert "unregister-local-service-task.ps1" in readme
+    assert "repair-local-service.ps1" in readme
+    assert "失败后自动重试" in readme
     assert "http://localhost:58623" in readme
