@@ -190,6 +190,7 @@ function renderBatchResults(payload) {
       </div>
       <span class="record-id">批次 #${escapeHtml(payload.batch_id.slice(0, 8))}</span>
     </div>
+    ${batchSummaryHtml(payload)}
     <div class="batch-list"></div>
   `;
   const list = container.querySelector(".batch-list");
@@ -197,6 +198,77 @@ function renderBatchResults(payload) {
     list.appendChild(buildRecordCard(record));
   });
   bindFeedbackForms(container);
+}
+
+function batchSummaryHtml(payload) {
+  const summary = buildBatchSummary(payload.records || []);
+  return `
+    <section class="batch-summary" aria-label="本批次摘要">
+      <div class="batch-summary-header">
+        <p class="eyebrow">本批次摘要</p>
+        <h3>先看整体，再逐条复核</h3>
+      </div>
+      <div class="summary-metrics batch-summary-metrics">
+        ${summaryMetric("本批次记录", payload.count ?? summary.total_records)}
+        ${summaryMetric("待复核", summary.unreviewed_records)}
+      </div>
+      <div class="summary-grid batch-summary-grid">
+        ${batchSummaryDistribution("问题类型", "issue_category", summary.issue_categories)}
+        ${batchSummaryDistribution("责任方", "responsibility", summary.responsibilities)}
+        ${batchSummaryDistribution("证据强度", "evidence", summary.evidence_strengths)}
+      </div>
+    </section>
+  `;
+}
+
+function buildBatchSummary(records) {
+  const issueCategories = {};
+  const responsibilities = {};
+  const evidenceStrengths = {};
+
+  records.forEach((record) => {
+    const attribution = record.analysis?.attribution || {};
+    incrementBatchCounter(issueCategories, attribution.issue_category);
+    incrementBatchCounter(responsibilities, attribution.primary_responsibility);
+    incrementBatchCounter(evidenceStrengths, attribution.evidence_strength);
+  });
+
+  return {
+    total_records: records.length,
+    unreviewed_records: records.length,
+    issue_categories: rankBatchSummary(issueCategories),
+    responsibilities: rankBatchSummary(responsibilities),
+    evidence_strengths: rankBatchSummary(evidenceStrengths),
+  };
+}
+
+function incrementBatchCounter(counter, value) {
+  const key = String(value || "unknown").trim() || "unknown";
+  counter[key] = (counter[key] || 0) + 1;
+}
+
+function rankBatchSummary(counter) {
+  return Object.entries(counter)
+    .map(([value, count]) => ({ value, count }))
+    .sort((left, right) => right.count - left.count || left.value.localeCompare(right.value));
+}
+
+function batchSummaryDistribution(title, labelGroup, items = []) {
+  const rows = items.length
+    ? items.map((item) => `
+        <li>
+          <span>${escapeHtml(labelFor(labelGroup, item.value))}</span>
+          <strong>${escapeHtml(item.count)}</strong>
+        </li>
+      `).join("")
+    : `<li><span>暂无数据</span><strong>0</strong></li>`;
+
+  return `
+    <article class="summary-card distribution-card batch-summary-card">
+      <h4>${escapeHtml(title)}</h4>
+      <ul class="distribution-list">${rows}</ul>
+    </article>
+  `;
 }
 
 function buildRecordCard(payload) {
