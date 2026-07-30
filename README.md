@@ -2,14 +2,36 @@
 
 本项目是海外电商客服会话分析工作台。首版支持人工粘贴或上传客服会话，对单条会话输出中文分析结论，帮助运营和分析专员判断客户使用产品时遇到的问题、可能业务原因、优先责任方和下一步动作。
 
+## 常驻本机服务
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\register-local-service-task.ps1
+```
+
+注册后，任务会在当前用户登录时自动启动本地服务，并固定监听 `http://localhost:58623`。
+
+如果你刚注册完，想立刻手动启动一次，可以执行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start-local-service.ps1
+```
+
+如果后续切换到了新的 worktree，建议在新 worktree 里重新执行一次注册脚本，让计划任务指向新的代码路径。
+
+移除计划任务：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\unregister-local-service-task.ps1
+```
+
 ## 本地运行
 
 ```powershell
 python -m pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -e ".[dev]"
-python -m uvicorn customer_issue_agent.app:create_app --factory --reload
+python -m uvicorn customer_issue_agent.app:create_app --factory --app-dir src --host 127.0.0.1 --port 58623
 ```
 
-打开 `http://127.0.0.1:8000`。
+打开 `http://localhost:58623`。
 
 ## 工作台使用方式
 
