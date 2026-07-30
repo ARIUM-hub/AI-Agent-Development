@@ -141,12 +141,29 @@ def test_static_assets_include_console_interactions(tmp_path) -> None:
     assert "Provider plan 审批" in index_body
     assert "provider-plan-form" in index_body
     assert "confirm-provider-apply" in index_body
+    assert "provider-preview-cards" in index_body
+    assert "provider-audit-cards" in index_body
+    assert "原始 JSON" in index_body
+    assert "执行结果 JSON" in index_body
     assert css_status == HTTPStatus.OK
     assert css_type == "text/css; charset=utf-8"
     assert "--ink" in css_body
     assert "@media" in css_body
     assert ".approval-layout" in css_body
     assert ".danger" in css_body
+    assert ".preview-card-list" in css_body
+    assert ".preview-card" in css_body
+    assert ".risk-badge" in css_body
+    assert ".risk-overwrite" in css_body
+    assert ".content-preview" in css_body
+    assert ".truncation-note" in css_body
+    assert ".audit-card-list" in css_body
+    assert ".audit-card" in css_body
+    assert ".audit-status-badge" in css_body
+    assert ".audit-success" in css_body
+    assert ".audit-failed" in css_body
+    assert ".audit-diff" in css_body
+    assert "overflow-wrap: anywhere" in css_body
     assert js_status == HTTPStatus.OK
     assert js_type == "text/javascript; charset=utf-8"
     assert "loadContext" in js_body
@@ -158,6 +175,23 @@ def test_static_assets_include_console_interactions(tmp_path) -> None:
     assert "需要重新预览" in js_body
     assert "/api/provider-plan/preview" in js_body
     assert "/api/provider-plan/apply" in js_body
+    assert "providerPreviewCards" in js_body
+    assert "renderProviderPreviewCards" in js_body
+    assert "clearProviderPreviewCards" in js_body
+    assert "providerAuditCards" in js_body
+    assert "renderProviderAuditCards" in js_body
+    assert "renderProviderAuditFailure" in js_body
+    assert "clearProviderAuditCards" in js_body
+    assert "providerRiskLabel" in js_body
+    assert "providerRiskClass" in js_body
+    assert "execution_error" in js_body
+    assert "applied_changes" in js_body
+    assert "content_preview_truncated" in js_body
+    assert "textContent" in js_body
+    reset_index = js_body.index("const resetProviderPreview")
+    audit_clear_index = js_body.index("clearProviderAuditCards();", reset_index)
+    stale_preview_guard_index = js_body.index("if (lastProviderPreview === null)", reset_index)
+    assert audit_clear_index < stale_preview_guard_index
 
 
 def test_provider_plan_preview_route_returns_preview_without_writing(tmp_path) -> None:
@@ -196,6 +230,11 @@ def test_provider_plan_apply_route_writes_file_and_records_history(tmp_path) -> 
     assert content_type == "application/json; charset=utf-8"
     assert payload["ok"] is True
     assert payload["applied_changes"][0]["path"] == "docs/from-web-route.md"
+    assert payload["preview_changes"][0]["path"] == "docs/from-web-route.md"
+    assert payload["preview_changes"][0]["content_preview"] == "确认 route 写入\n"
+    assert payload["preview_changes"][0]["risk"] == "create"
+    assert "diff_stat" in payload
+    assert payload["execution_error"] is None
     assert (tmp_path / "docs" / "from-web-route.md").read_text(encoding="utf-8") == "确认 route 写入\n"
     history = (tmp_path / ".agent" / "history" / "tasks.jsonl").read_text(encoding="utf-8")
     assert "Web provider route" in history

@@ -193,6 +193,240 @@ button:disabled {
   font-weight: 800;
 }
 
+.result-heading {
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.preview-card-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.preview-empty-state,
+.preview-card {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.preview-empty-state {
+  padding: 14px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.preview-card {
+  padding: 14px;
+  box-shadow: 0 12px 28px rgba(31, 45, 33, 0.08);
+}
+
+.preview-card.risk-create {
+  border-color: rgba(82, 107, 74, 0.34);
+  background: rgba(238, 247, 231, 0.74);
+}
+
+.preview-card.risk-overwrite {
+  border-color: rgba(201, 112, 74, 0.46);
+  background: rgba(255, 244, 232, 0.86);
+}
+
+.preview-card.risk-append,
+.preview-card.risk-append-create {
+  border-color: rgba(64, 112, 111, 0.34);
+  background: rgba(235, 247, 244, 0.76);
+}
+
+.preview-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.preview-card-header h4 {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.risk-badge {
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 10px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.64);
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.risk-badge.risk-create {
+  color: #2f5b2d;
+  background: rgba(229, 244, 218, 0.9);
+}
+
+.risk-badge.risk-overwrite {
+  color: #8b3f1e;
+  background: rgba(255, 232, 211, 0.95);
+}
+
+.risk-badge.risk-append,
+.risk-badge.risk-append-create {
+  color: #285f5a;
+  background: rgba(222, 244, 240, 0.95);
+}
+
+.preview-meta,
+.preview-content-label,
+.truncation-note {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.preview-meta {
+  margin: 8px 0 0;
+}
+
+.preview-content-label {
+  margin-top: 10px;
+  font-weight: 800;
+}
+
+.content-preview {
+  min-height: auto;
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.truncation-note {
+  margin-top: 10px;
+  border-radius: 12px;
+  padding: 9px 10px;
+  color: #7a4a18;
+  background: rgba(255, 244, 214, 0.88);
+}
+
+.audit-card-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.audit-card {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.52);
+  box-shadow: 0 12px 28px rgba(31, 45, 33, 0.08);
+}
+
+.audit-card.audit-success {
+  border-color: rgba(82, 107, 74, 0.34);
+  background: rgba(238, 247, 231, 0.74);
+}
+
+.audit-card.audit-failed {
+  border-color: rgba(154, 55, 45, 0.36);
+  background: rgba(255, 238, 232, 0.86);
+}
+
+.audit-card.audit-neutral {
+  border-color: rgba(64, 112, 111, 0.28);
+  background: rgba(244, 248, 248, 0.72);
+}
+
+.audit-card.risk-create {
+  border-color: rgba(82, 107, 74, 0.34);
+  background: rgba(238, 247, 231, 0.68);
+}
+
+.audit-card.risk-overwrite {
+  border-color: rgba(201, 112, 74, 0.46);
+  background: rgba(255, 244, 232, 0.84);
+}
+
+.audit-card.risk-append,
+.audit-card.risk-append-create {
+  border-color: rgba(64, 112, 111, 0.34);
+  background: rgba(235, 247, 244, 0.72);
+}
+
+.audit-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.audit-card-header h4 {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.audit-status-badge {
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 10px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.64);
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.audit-status-badge.audit-success {
+  color: #2f5b2d;
+  background: rgba(229, 244, 218, 0.9);
+}
+
+.audit-status-badge.audit-failed {
+  color: #7a251d;
+  background: rgba(255, 223, 216, 0.95);
+}
+
+.audit-status-badge.audit-neutral {
+  color: #285f5a;
+  background: rgba(222, 244, 240, 0.95);
+}
+
+.audit-meta,
+.audit-error {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.audit-meta {
+  margin: 8px 0 0;
+}
+
+.audit-error {
+  margin-top: 10px;
+  border-radius: 12px;
+  padding: 9px 10px;
+  color: #7a251d;
+  background: rgba(255, 238, 232, 0.86);
+}
+
+.audit-diff {
+  min-height: auto;
+  margin-top: 10px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 .danger {
   margin: 12px 0 0;
   border: 1px solid rgba(154, 55, 45, 0.36);
@@ -251,5 +485,14 @@ button:disabled {
 
   .button-row {
     flex-direction: column;
+  }
+
+  .preview-card-header,
+  .audit-card-header {
+    flex-direction: column;
+  }
+
+  .risk-badge {
+    white-space: normal;
   }
 }
