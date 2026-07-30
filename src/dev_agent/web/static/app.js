@@ -7,6 +7,302 @@ const getJson = async (path) => {
   return response.json();
 };
 
+const contextCards = () => document.getElementById("context-cards");
+
+const clearContextCards = () => {
+  contextCards().replaceChildren();
+};
+
+const contextObject = (value) => {
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    return value;
+  }
+  return {};
+};
+
+const contextText = (value, fallback) => {
+  if (typeof value === "string" && value.trim() !== "") {
+    return value;
+  }
+  return fallback;
+};
+
+const contextValues = (value) => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter((item) => typeof item === "string" || typeof item === "number")
+    .map((item) => String(item).trim())
+    .filter((item) => item !== "");
+};
+
+const contextCommandLabel = (name) => {
+  const labels = {
+    test: "测试",
+    lint: "代码检查",
+    typecheck: "类型检查",
+    build: "构建",
+  };
+  return labels[name] || contextText(name, "验证命令");
+};
+
+const formatContextCommandPart = (part) => {
+  const text = String(part);
+  if (text === "" || /[\s\"]/.test(text)) {
+    return JSON.stringify(text);
+  }
+  return text;
+};
+
+const formatContextCommand = (command) => {
+  if (typeof command === "string") {
+    return command.trim();
+  }
+  if (!Array.isArray(command)) {
+    return "";
+  }
+  return command
+    .filter((part) => typeof part === "string" || typeof part === "number")
+    .map(formatContextCommandPart)
+    .join(" ")
+    .trim();
+};
+
+const collectContextCommands = (payload) => {
+  const source = contextObject(payload);
+  const steps = Array.isArray(source.verification_steps) ? source.verification_steps : [];
+  let candidates = steps
+    .map((step) => {
+      const item = contextObject(step);
+      return {
+        label: contextCommandLabel(item.name),
+        command: formatContextCommand(item.command),
+      };
+    })
+    .filter((item) => item.command !== "");
+
+  if (candidates.length === 0) {
+    const scan = contextObject(source.scan);
+    const suggested = contextObject(scan.suggested_commands);
+    candidates = ["test", "lint", "typecheck", "build"]
+      .map((name) => ({
+        label: contextCommandLabel(name),
+        command: formatContextCommand(suggested[name]),
+      }))
+      .filter((item) => item.command !== "");
+  }
+
+  const seen = new Set();
+  return candidates.filter((item) => {
+    if (seen.has(item.command)) {
+      return false;
+    }
+    seen.add(item.command);
+    return true;
+  });
+};
+
+const copyContextCommand = async (button, command) => {
+  try {
+    await navigator.clipboard.writeText(command);
+    button.textContent = "已复制";
+  } catch (_error) {
+    button.textContent = "复制失败";
+  }
+  window.setTimeout(() => {
+    if (button.isConnected) {
+      button.textContent = "一键复制";
+    }
+  }, 1600);
+};
+
+const appendContextText = (parent, className, text) => {
+  const element = document.createElement("div");
+  element.className = className;
+  element.textContent = text;
+  parent.appendChild(element);
+  return element;
+};
+
+const appendContextTags = (parent, label, values) => {
+  const field = document.createElement("section");
+  field.className = "context-field";
+  appendContextText(field, "context-label", label);
+
+  const tags = document.createElement("div");
+  tags.className = "context-tag-list";
+  const normalized = contextValues(values);
+  if (normalized.length === 0) {
+    appendContextText(tags, "context-empty-state", "未检测到");
+  } else {
+    normalized.forEach((value) => {
+      appendContextText(tags, "context-tag", value);
+    });
+  }
+  field.appendChild(tags);
+  parent.appendChild(field);
+};
+
+const appendContextGitSection = (parent, label, value, emptyText) => {
+  const section = document.createElement("section");
+  section.className = "context-git-section";
+  appendContextText(section, "context-label", label);
+  const output = document.createElement("pre");
+  output.className = "context-git-output";
+  output.textContent = contextText(value, emptyText);
+  section.appendChild(output);
+  parent.appendChild(section);
+};
+
+const buildContextProjectCard = (payload) => {
+  const source = contextObject(payload);
+  const project = contextObject(source.project);
+  const scan = contextObject(source.scan);
+  const card = document.createElement("article");
+  card.className = "context-card context-project-card";
+
+  appendContextText(card, "context-card-kicker", "项目总览");
+  const title = document.createElement("h3");
+  title.textContent = contextText(project.name, "未命名项目");
+  card.appendChild(title);
+  appendContextText(card, "context-path", `扫描目录：${contextText(scan.root, "未检测到")}`);
+
+  const fields = document.createElement("div");
+  fields.className = "context-field-grid";
+  appendContextTags(fields, "技术栈", project.tech_stack);
+  appendContextTags(fields, "识别语言", scan.languages);
+  appendContextTags(fields, "项目标记", scan.markers);
+  card.appendChild(fields);
+  return card;
+};
+
+const buildContextGitCard = (payload) => {
+  const source = contextObject(payload);
+  const git = contextObject(source.git);
+  const card = document.createElement("article");
+  let stateClass = "context-git-unknown";
+  let stateLabel = "暂无 Git 状态";
+  let statusText = "暂无 Git 状态";
+
+  if (typeof git.status === "string") {
+    if (git.status.trim() === "") {
+      stateClass = "context-git-clean";
+      stateLabel = "工作区干净";
+      statusText = "没有未提交变更。";
+    } else {
+      stateClass = "context-git-changed";
+      stateLabel = "工作区有变更";
+      statusText = git.status;
+    }
+  }
+
+  card.className = `context-card context-git-card ${stateClass}`;
+  const header = document.createElement("div");
+  header.className = "context-card-header";
+  const title = document.createElement("h3");
+  title.textContent = "Git 状态";
+  const badge = document.createElement("span");
+  badge.className = `context-status-badge ${stateClass}`;
+  badge.textContent = stateLabel;
+  header.append(title, badge);
+  card.appendChild(header);
+
+  const fields = document.createElement("div");
+  fields.className = "context-git-grid";
+  appendContextGitSection(fields, "工作区", statusText, "暂无 Git 状态");
+  appendContextGitSection(fields, "变更统计", git.diff_stat, "暂无变更统计");
+  appendContextGitSection(fields, "最近提交", git.recent_log, "暂无提交记录");
+  card.appendChild(fields);
+  return card;
+};
+
+const buildContextCommandsCard = (payload) => {
+  const card = document.createElement("article");
+  card.className = "context-card context-command-card";
+  const title = document.createElement("h3");
+  title.textContent = "验证命令";
+  card.appendChild(title);
+
+  const list = document.createElement("div");
+  list.className = "context-command-list";
+  const commands = collectContextCommands(payload);
+  if (commands.length === 0) {
+    appendContextText(list, "context-empty-state", "暂无验证命令");
+  } else {
+    commands.forEach(({ label, command }) => {
+      const row = document.createElement("div");
+      row.className = "context-command-row";
+      const main = document.createElement("div");
+      main.className = "context-command-main";
+      appendContextText(main, "context-command-label", label);
+      const code = document.createElement("code");
+      code.className = "context-command-code";
+      code.textContent = command;
+      main.appendChild(code);
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "context-copy-button";
+      button.textContent = "一键复制";
+      button.setAttribute("aria-label", `复制${label}命令`);
+      button.addEventListener("click", () => copyContextCommand(button, command));
+      row.append(main, button);
+      list.appendChild(row);
+    });
+  }
+  card.appendChild(list);
+  return card;
+};
+
+const buildContextSupportCard = (payload) => {
+  const source = contextObject(payload);
+  const preferences = contextObject(source.preferences);
+  const card = document.createElement("article");
+  card.className = "context-card context-support-card";
+  const title = document.createElement("h3");
+  title.textContent = "偏好与规则";
+  card.appendChild(title);
+
+  const fields = document.createElement("div");
+  fields.className = "context-preferences";
+  appendContextText(
+    fields,
+    "context-preference",
+    `语言：${contextText(preferences.language, "未设置")}`,
+  );
+  appendContextText(
+    fields,
+    "context-preference",
+    `审批模式：${contextText(preferences.approval_mode, "未设置")}`,
+  );
+  card.appendChild(fields);
+
+  const details = document.createElement("details");
+  details.className = "context-rule-detail";
+  const summary = document.createElement("summary");
+  summary.textContent = "查看项目规则";
+  const rules = document.createElement("pre");
+  rules.className = "context-rule-text";
+  rules.textContent = contextText(source.rules_text, "暂无项目规则");
+  details.append(summary, rules);
+  card.appendChild(details);
+  return card;
+};
+
+const renderContextCards = (payload) => {
+  clearContextCards();
+  const source = contextObject(payload);
+  const overview = document.createElement("div");
+  overview.className = "context-overview-grid";
+  overview.append(buildContextProjectCard(source), buildContextGitCard(source));
+  contextCards().append(
+    overview,
+    buildContextCommandsCard(source),
+    buildContextSupportCard(source),
+  );
+};
+
 const historyCards = () => document.getElementById("history-cards");
 
 const historyStatusLabel = (status) => {
@@ -128,7 +424,9 @@ async function loadHealth() {
 }
 
 async function loadContext() {
-  renderJson("context", await getJson("/api/context"));
+  const payload = await getJson("/api/context");
+  renderContextCards(payload);
+  renderJson("context", payload);
 }
 
 async function loadHistory() {

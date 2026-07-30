@@ -236,6 +236,20 @@ def test_static_assets_include_console_interactions(tmp_path) -> None:
     assert js_status == HTTPStatus.OK
     assert js_type == "text/javascript; charset=utf-8"
     assert "loadContext" in js_body
+    assert "contextCards" in js_body
+    assert "clearContextCards" in js_body
+    assert "formatContextCommand" in js_body
+    assert "collectContextCommands" in js_body
+    assert "contextCommandLabel" in js_body
+    assert "copyContextCommand" in js_body
+    assert "renderContextCards" in js_body
+    assert "navigator.clipboard.writeText(command)" in js_body
+    assert 'button.textContent = "已复制"' in js_body
+    assert 'button.textContent = "复制失败"' in js_body
+    load_context_index = js_body.index("async function loadContext")
+    render_context_index = js_body.index("renderContextCards(payload)", load_context_index)
+    context_json_index = js_body.index('renderJson("context", payload)', load_context_index)
+    assert render_context_index < context_json_index
     assert "historyCards" in js_body
     assert "renderHistoryCards" in js_body
     assert "historyStatusLabel" in js_body
