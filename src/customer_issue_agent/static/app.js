@@ -370,6 +370,7 @@ function renderRecordsSummary(summary) {
       ${summaryMetric("已修正", summary.corrected_records)}
     </div>
     <div class="summary-grid">
+      ${summaryDistribution("平台分布", "platform", summary.platforms)}
       ${summaryDistribution("问题类型", "issue_category", summary.issue_categories)}
       ${summaryDistribution("责任方", "responsibility", summary.responsibilities)}
       ${summaryDistribution("证据强度", "evidence", summary.evidence_strengths)}

@@ -429,6 +429,8 @@ def test_static_app_js_contains_summary_dashboard_hooks(tmp_path):
     assert "renderRecordsSummary" in script
     assert "summaryMetric" in script
     assert "summaryDistribution" in script
+    assert "平台分布" in script
+    assert "summary.platforms" in script
 
 
 def test_styles_cover_summary_dashboard_components(tmp_path):
