@@ -321,6 +321,9 @@ def test_index_contains_recent_record_filter_controls(tmp_path):
     assert 'class="export-filter-summary"' in html
     assert 'aria-live="polite"' in html
     assert "将导出全部记录" in html
+    assert 'id="export-count-preview"' in html
+    assert 'class="export-count-preview"' in html
+    assert "预计导出数量加载中..." in html
 
 
 def test_recent_records_include_filter_data_attributes(tmp_path):
