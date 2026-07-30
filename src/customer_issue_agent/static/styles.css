@@ -388,7 +388,8 @@ textarea:focus-visible {
 }
 
 .filter-field span,
-.filter-count {
+.filter-count,
+.export-filter-summary {
   color: var(--muted);
   font-size: 13px;
 }
@@ -396,6 +397,15 @@ textarea:focus-visible {
 .filter-count {
   grid-column: 1 / -1;
   margin: 0;
+}
+
+.export-filter-summary {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.7);
 }
 
 .filter-empty {
