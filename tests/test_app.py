@@ -244,6 +244,11 @@ def test_static_app_js_contains_batch_and_feedback_hooks(tmp_path):
     assert "renderBatchResults" in script
     assert "bindFeedbackForms" in script
     assert "submitFeedbackForm" in script
+    assert "buildBatchSummary" in script
+    assert "batchSummaryHtml" in script
+    assert "batchSummaryDistribution" in script
+    assert "本批次摘要" in script
+    assert "待复核" in script
 
 
 def test_export_records_csv_endpoint_returns_bom_csv_with_feedback(tmp_path):
