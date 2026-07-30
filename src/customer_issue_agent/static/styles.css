@@ -416,6 +416,16 @@ textarea:focus-visible {
   font-weight: 700;
 }
 
+.review-queue-toggle {
+  white-space: nowrap;
+}
+
+.review-queue-toggle.is-active {
+  border-color: rgba(172, 92, 46, 0.55);
+  background: rgba(172, 92, 46, 0.12);
+  color: #8a3f20;
+}
+
 .filter-empty {
   margin: 16px 0 0;
   padding: 16px;
