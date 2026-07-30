@@ -393,6 +393,7 @@ Run:
 $OutputEncoding = [System.Text.Encoding]::UTF8
 $env:PYTHONIOENCODING='utf-8'
 $env:PYTHONUTF8='1'
+$env:PYTHONPATH = (Resolve-Path 'src').Path
 python -m dev_agent.cli doctor
 python -m dev_agent.cli scan
 python -m dev_agent.cli serve --port 0 --check
@@ -409,30 +410,75 @@ Run:
 $OutputEncoding = [System.Text.Encoding]::UTF8
 $env:PYTHONIOENCODING='utf-8'
 $env:PYTHONUTF8='1'
-$env:PYTHONPATH = (Resolve-Path 'src').Path
-$tmp = Join-Path $env:TEMP ('dev-agent-readable-preview-smoke-' + [System.Guid]::NewGuid().ToString('N'))
-New-Item -ItemType Directory -Path $tmp | Out-Null
-$plan = @{
-  summary = '创建可读预览 smoke'
-  operations = @(
-    @{
-      action = 'create_text'
-      path = 'docs/readable-preview.md'
-      content = "第一行`n第二行`n"
-    }
-  )
-} | ConvertTo-Json -Depth 5 -Compress
-Push-Location $tmp
-try {
-  python -m dev_agent.cli run '预览可读内容' --fake-response $plan --use-provider-plan --preview
+$smoke = Join-Path $env:TEMP ('dev-agent-readable-preview-smoke-' + [System.Guid]::NewGuid().ToString('N') + '.py')
+@'
+import json
+import os
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+repo = Path.cwd()
+env = os.environ.copy()
+env["PYTHONIOENCODING"] = "utf-8"
+env["PYTHONUTF8"] = "1"
+env["PYTHONPATH"] = str(repo / "src")
+plan = json.dumps(
+    {
+        "summary": "创建可读预览 smoke",
+        "operations": [
+            {
+                "action": "create_text",
+                "path": "docs/readable-preview-smoke.md",
+                "content": "第一行\n第二行\n",
+            }
+        ],
+    },
+    ensure_ascii=False,
+)
+with tempfile.TemporaryDirectory(prefix="dev-agent-readable-preview-smoke-") as tmp:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "dev_agent.cli",
+            "run",
+            "预览可读内容",
+            "--fake-response",
+            plan,
+            "--use-provider-plan",
+            "--preview",
+        ],
+        cwd=tmp,
+        env=env,
+        text=True,
+        encoding="utf-8",
+        capture_output=True,
+        check=False,
+    )
+    print(result.stdout)
+    if result.stderr:
+        print(result.stderr, file=sys.stderr)
+    if result.returncode != 0:
+        raise SystemExit(result.returncode)
+    payload = json.loads(result.stdout)
+    assert payload["preview_changes"][0]["content_preview"] == "第一行\n第二行\n"
+    assert not (Path(tmp) / "docs" / "readable-preview-smoke.md").exists()
+    print("provider-preview-smoke-ok")
+'@ | Set-Content -LiteralPath $smoke -Encoding UTF8
+python $smoke
+$code = $LASTEXITCODE
+if ($code -eq 0) {
+  Remove-Item -LiteralPath $smoke -Force
 }
-finally {
-  Pop-Location
-  Remove-Item -LiteralPath $tmp -Recurse -Force
+else {
+  Write-Error "Smoke script kept for debugging: $smoke"
 }
+exit $code
 ```
 
-Expected: command exits `0`; JSON `preview_changes[0]` includes `"content_preview": "第一行\n第二行\n"` and the temporary directory is removed.
+Expected: command exits `0`; JSON `preview_changes[0]` includes `"content_preview": "第一行\n第二行\n"` and prints `provider-preview-smoke-ok`.
 
 - [ ] **Step 4: Inspect git status and recent commits**
 
