@@ -129,20 +129,32 @@ def test_static_index_route_returns_html(tmp_path) -> None:
 def test_static_assets_include_console_interactions(tmp_path) -> None:
     server, base_url = start_server(tmp_path)
     try:
+        index_status, index_type, index_body = get_text(f"{base_url}/")
         css_status, css_type, css_body = get_text(f"{base_url}/static/styles.css")
         js_status, js_type, js_body = get_text(f"{base_url}/static/app.js")
     finally:
         server.shutdown()
         server.server_close()
 
+    assert index_status == HTTPStatus.OK
+    assert index_type == "text/html; charset=utf-8"
+    assert "Provider plan 审批" in index_body
+    assert "provider-plan-form" in index_body
+    assert "confirm-provider-apply" in index_body
     assert css_status == HTTPStatus.OK
     assert css_type == "text/css; charset=utf-8"
     assert "--ink" in css_body
     assert "@media" in css_body
+    assert ".approval-layout" in css_body
+    assert ".danger" in css_body
     assert js_status == HTTPStatus.OK
     assert js_type == "text/javascript; charset=utf-8"
     assert "loadContext" in js_body
     assert "submitRun" in js_body
+    assert "submitProviderPreview" in js_body
+    assert "submitProviderApply" in js_body
+    assert "/api/provider-plan/preview" in js_body
+    assert "/api/provider-plan/apply" in js_body
 
 
 def test_provider_plan_preview_route_returns_preview_without_writing(tmp_path) -> None:

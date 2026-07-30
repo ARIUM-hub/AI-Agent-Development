@@ -154,6 +154,55 @@ textarea:focus-visible {
   outline-offset: 3px;
 }
 
+.helper {
+  margin: 12px 0 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.approval-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.9fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+  transform: none;
+  box-shadow: none;
+}
+
+.status-pill {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  margin: 14px 0 0;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 12px;
+  color: var(--moss);
+  background: rgba(255, 255, 255, 0.48);
+  font-weight: 800;
+}
+
+.danger {
+  margin: 12px 0 0;
+  border: 1px solid rgba(154, 55, 45, 0.36);
+  border-radius: 14px;
+  padding: 12px;
+  color: #7a251d;
+  background: rgba(255, 238, 232, 0.86);
+  line-height: 1.6;
+}
+
 @keyframes rise-in {
   from {
     opacity: 0;
@@ -194,5 +243,13 @@ textarea:focus-visible {
 
   .run-panel {
     grid-column: auto;
+  }
+
+  .approval-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .button-row {
+    flex-direction: column;
   }
 }
