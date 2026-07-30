@@ -622,6 +622,43 @@ def test_export_records_csv_endpoint_filters_by_time_range_and_query(tmp_path):
     assert "old-amazon" not in text
 
 
+def test_export_records_count_endpoint_matches_filtered_export_scope(tmp_path):
+    storage_path = tmp_path / "analyses.jsonl"
+    now = datetime.now(UTC)
+    _write_jsonl_records(
+        storage_path,
+        [
+            _stored_record("recent-amazon", platform="Amazon", created_at=now - timedelta(days=2)),
+            _stored_record("recent-tiktok", platform="TikTok Shop", created_at=now - timedelta(days=2)),
+            _stored_record("old-amazon", platform="Amazon", created_at=now - timedelta(days=40)),
+        ],
+    )
+    app = create_app(storage_path=storage_path)
+    client = TestClient(app)
+
+    response = client.get("/api/records/export-count", params={"range": "30d", "platform": "amazon"})
+
+    assert response.status_code == 200
+    assert response.json() == {"count": 1}
+
+
+def test_export_records_count_endpoint_returns_zero_for_empty_filter_result(tmp_path):
+    storage_path = tmp_path / "analyses.jsonl"
+    _write_jsonl_records(
+        storage_path,
+        [
+            _stored_record("amazon", platform="Amazon", created_at=datetime.now(UTC)),
+        ],
+    )
+    app = create_app(storage_path=storage_path)
+    client = TestClient(app)
+
+    response = client.get("/api/records/export-count", params={"feedback_status": "archived"})
+
+    assert response.status_code == 200
+    assert response.json() == {"count": 0}
+
+
 def test_index_contains_summary_range_selector(tmp_path):
     app = create_app(storage_path=tmp_path / "analyses.jsonl")
     client = TestClient(app)

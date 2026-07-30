@@ -121,6 +121,26 @@ def create_app(storage_path: Path | None = None) -> FastAPI:
             headers={"Content-Disposition": "attachment; filename=customer-issue-records.csv"},
         )
 
+    @app.get("/api/records/export-count")
+    async def export_records_count(
+        platform: str = "",
+        issue_category: str = "",
+        responsibility: str = "",
+        feedback_status: str = "",
+        q: str = "",
+        range: str = "all",
+    ) -> dict:
+        records = filter_records(
+            store.list_records(),
+            platform=platform,
+            issue_category=issue_category,
+            responsibility=responsibility,
+            feedback_status=feedback_status,
+            q=q,
+            range=range,
+        )
+        return {"count": len(records)}
+
     @app.get("/api/records/summary")
     async def records_summary(range: str = "all") -> dict:
         return build_records_summary(filter_records(store.list_records(), range=range))
