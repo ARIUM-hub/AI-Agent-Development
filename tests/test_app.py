@@ -703,6 +703,8 @@ def test_styles_cover_record_detail_components(tmp_path):
     assert ".record-detail" in css
     assert ".record-detail-grid" in css
     assert ".record-detail-grid dt" in css
+    assert ".record-copy-action" in css
+    assert ".record-copy-status" in css
 
 
 def test_index_contains_platform_presets_for_all_platform_inputs(tmp_path):

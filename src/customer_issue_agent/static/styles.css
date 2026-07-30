@@ -329,6 +329,25 @@ textarea:focus-visible {
   white-space: normal;
 }
 
+.record-copy-action {
+  margin-bottom: 12px;
+}
+
+.record-copy-status {
+  min-height: 20px;
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.record-copy-status.is-success {
+  color: var(--accent);
+}
+
+.record-copy-status.is-error {
+  color: #b42318;
+}
+
 .record-detail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
