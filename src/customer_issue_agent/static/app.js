@@ -421,6 +421,7 @@ function buildFilteredExportUrl() {
   const params = new URLSearchParams();
   const summaryRange = document.getElementById("summary-range")?.value || "all";
   const query = document.getElementById("record-search")?.value.trim() || "";
+  const platform = document.getElementById("platform-filter")?.value.trim() || "";
   const issue = document.getElementById("issue-filter")?.value || "";
   const responsibility = document.getElementById("responsibility-filter")?.value || "";
   const feedback = document.getElementById("feedback-filter")?.value || "";
@@ -430,6 +431,9 @@ function buildFilteredExportUrl() {
   }
   if (query) {
     params.set("q", query);
+  }
+  if (platform) {
+    params.set("platform", platform);
   }
   if (issue) {
     params.set("issue_category", issue);
@@ -534,13 +538,14 @@ function bindRecordFilters() {
 function applyRecordFilters() {
   const records = Array.from(document.querySelectorAll("#recent-records .record"));
   const query = document.getElementById("record-search")?.value.trim().toLowerCase() || "";
+  const platform = document.getElementById("platform-filter")?.value.trim().toLowerCase() || "";
   const issue = document.getElementById("issue-filter")?.value || "";
   const responsibility = document.getElementById("responsibility-filter")?.value || "";
   const feedback = document.getElementById("feedback-filter")?.value || "";
   let visible = 0;
 
   records.forEach((record) => {
-    const matches = recordMatchesFilters(record, { query, issue, responsibility, feedback });
+    const matches = recordMatchesFilters(record, { query, platform, issue, responsibility, feedback });
     record.hidden = !matches;
     if (matches) {
       visible += 1;
@@ -557,11 +562,13 @@ function resetRecordFilters(form) {
 
 function recordMatchesFilters(record, filters) {
   const searchText = (record.dataset.searchText || "").toLowerCase();
+  const platform = (record.dataset.platform || "").toLowerCase();
   const matchesQuery = !filters.query || searchText.includes(filters.query);
+  const matchesPlatform = !filters.platform || platform.includes(filters.platform);
   const matchesIssue = !filters.issue || record.dataset.issueCategory === filters.issue;
   const matchesResponsibility = !filters.responsibility || record.dataset.responsibility === filters.responsibility;
   const matchesFeedback = !filters.feedback || record.dataset.feedbackStatus === filters.feedback;
-  return matchesQuery && matchesIssue && matchesResponsibility && matchesFeedback;
+  return matchesQuery && matchesPlatform && matchesIssue && matchesResponsibility && matchesFeedback;
 }
 
 function updateFilterState(visible, total) {
