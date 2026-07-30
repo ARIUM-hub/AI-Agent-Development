@@ -120,7 +120,7 @@ content_preview_char_count: int
 - 短内容不截断，`content_preview_truncated` 为 `false`。
 - 超过 6 行的内容按行截断，`content_preview_truncated` 为 `true`。
 - 超过 600 字符的单行内容按字符截断，`content_preview_truncated` 为 `true`。
-- 中文内容直接保留，不出现 `\uXXXX` 转义。
+- 中文内容直接保留，不使用 Unicode 转义形式。
 
 CLI 测试：
 

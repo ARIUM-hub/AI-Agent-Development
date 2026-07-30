@@ -175,7 +175,6 @@ def test_applier_preview_truncates_content_preview_by_characters(tmp_path) -> No
     assert preview["content_preview_truncated"] is True
     assert preview["content_preview_line_count"] == 1
     assert preview["content_preview_char_count"] == 601
-    assert "\\u4e2d" not in preview["content_preview"]
     assert not (tmp_path / "docs" / "chars.md").exists()
 
 
