@@ -212,6 +212,11 @@ def test_provider_plan_apply_route_writes_file_and_records_history(tmp_path) -> 
     assert content_type == "application/json; charset=utf-8"
     assert payload["ok"] is True
     assert payload["applied_changes"][0]["path"] == "docs/from-web-route.md"
+    assert payload["preview_changes"][0]["path"] == "docs/from-web-route.md"
+    assert payload["preview_changes"][0]["content_preview"] == "确认 route 写入\n"
+    assert payload["preview_changes"][0]["risk"] == "create"
+    assert "diff_stat" in payload
+    assert payload["execution_error"] is None
     assert (tmp_path / "docs" / "from-web-route.md").read_text(encoding="utf-8") == "确认 route 写入\n"
     history = (tmp_path / ".agent" / "history" / "tasks.jsonl").read_text(encoding="utf-8")
     assert "Web provider route" in history
