@@ -76,6 +76,19 @@ def test_health_route_returns_json(tmp_path) -> None:
 
 def test_context_route_returns_project_context(tmp_path) -> None:
     write_text_utf8(tmp_path / "pyproject.toml", "[project]\nname = \"sample\"\n")
+    write_text_utf8(
+        tmp_path / ".agent" / "project.yaml",
+        "name: 示例项目\ntech_stack:\n  - python\n  - pytest\n",
+    )
+    write_text_utf8(
+        tmp_path / ".agent" / "commands.yaml",
+        "test: python -m pytest -v\nlint: python -m ruff check .\n",
+    )
+    write_text_utf8(tmp_path / ".agent" / "rules.md", "所有文本使用 UTF-8。\n")
+    write_text_utf8(
+        tmp_path / ".dev-agent" / "preferences.yaml",
+        "language: zh-CN\napproval_mode: confirm\n",
+    )
     server, base_url = start_server(tmp_path)
     try:
         status, content_type, payload = get_json(f"{base_url}/api/context")
@@ -85,7 +98,30 @@ def test_context_route_returns_project_context(tmp_path) -> None:
 
     assert status == HTTPStatus.OK
     assert content_type == "application/json; charset=utf-8"
+    assert payload["project"] == {
+        "name": "示例项目",
+        "tech_stack": ["python", "pytest"],
+    }
+    assert payload["preferences"] == {
+        "language": "zh-CN",
+        "approval_mode": "confirm",
+    }
+    assert payload["rules_text"] == "所有文本使用 UTF-8。\n"
+    assert payload["scan"]["root"] == str(tmp_path.resolve())
     assert payload["scan"]["languages"] == ["python"]
+    assert payload["scan"]["markers"] == ["pyproject.toml"]
+    assert payload["scan"]["suggested_commands"] == {
+        "test": "python -m pytest",
+        "lint": None,
+        "typecheck": None,
+        "build": None,
+    }
+    assert set(payload["git"]) == {"status", "diff_stat", "recent_log"}
+    assert all(isinstance(value, str) for value in payload["git"].values())
+    assert payload["verification_steps"] == [
+        {"name": "test", "command": ["python", "-m", "pytest", "-v"]},
+        {"name": "lint", "command": ["python", "-m", "ruff", "check", "."]},
+    ]
 
 
 def test_history_route_returns_json(tmp_path) -> None:
