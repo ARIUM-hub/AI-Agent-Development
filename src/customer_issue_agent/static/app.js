@@ -531,6 +531,8 @@ function recordDetailHtml(recordId, analysis, feedback = null) {
       aria-controls="${escapeHtml(detailId)}"
     >查看详情</button>
     <div id="${escapeHtml(detailId)}" class="record-detail" hidden>
+      <button class="record-copy-action secondary-action" type="button" data-record-copy>复制详情</button>
+      <p class="record-copy-status" data-record-copy-status aria-live="polite"></p>
       <dl class="record-detail-grid">
         ${recordDetailRow("客户问题", attribution.customer_problem)}
         ${recordDetailRow("问题类型", labelFor("issue_category", attribution.issue_category))}

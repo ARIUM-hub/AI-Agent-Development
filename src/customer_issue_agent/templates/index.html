@@ -194,6 +194,8 @@
                     aria-controls="record-detail-{{ record.id }}"
                   >查看详情</button>
                   <div id="record-detail-{{ record.id }}" class="record-detail" hidden>
+                    <button class="record-copy-action secondary-action" type="button" data-record-copy>复制详情</button>
+                    <p class="record-copy-status" data-record-copy-status aria-live="polite"></p>
                     <dl class="record-detail-grid">
                       <div>
                         <dt>客户问题</dt>

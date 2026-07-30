@@ -656,6 +656,10 @@ def test_recent_records_include_expandable_detail_markup(tmp_path):
     assert 'aria-expanded="false"' in html
     assert 'aria-controls="record-detail-' in html
     assert 'class="record-detail"' in html
+    assert "复制详情" in html
+    assert "data-record-copy" in html
+    assert "data-record-copy-status" in html
+    assert 'aria-live="polite"' in html
     assert "客户问题" in html
     assert "下一步建议" in html
     assert "人工备注" in html
@@ -674,6 +678,8 @@ def test_static_app_js_contains_record_detail_hooks(tmp_path):
     assert "toggleRecordDetail" in script
     assert "recordDetailHtml" in script
     assert "data-record-detail-toggle" in script
+    assert "data-record-copy" in script
+    assert "data-record-copy-status" in script
     assert "aria-expanded" in script
     assert "收起详情" in script
 
