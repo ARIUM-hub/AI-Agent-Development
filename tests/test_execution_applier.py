@@ -101,6 +101,10 @@ def test_applier_preview_reports_target_state_bytes_and_risk(tmp_path) -> None:
             "exists": False,
             "content_bytes": len("# 新文件\n".encode("utf-8")),
             "risk": "create",
+            "content_preview": "# 新文件\n",
+            "content_preview_truncated": False,
+            "content_preview_line_count": 1,
+            "content_preview_char_count": len("# 新文件\n"),
         },
         {
             "action": "overwrite_text",
@@ -108,6 +112,10 @@ def test_applier_preview_reports_target_state_bytes_and_risk(tmp_path) -> None:
             "exists": True,
             "content_bytes": len("新内容\n".encode("utf-8")),
             "risk": "overwrite",
+            "content_preview": "新内容\n",
+            "content_preview_truncated": False,
+            "content_preview_line_count": 1,
+            "content_preview_char_count": len("新内容\n"),
         },
         {
             "action": "append_text",
@@ -115,6 +123,10 @@ def test_applier_preview_reports_target_state_bytes_and_risk(tmp_path) -> None:
             "exists": False,
             "content_bytes": len("追加\n".encode("utf-8")),
             "risk": "append_create",
+            "content_preview": "追加\n",
+            "content_preview_truncated": False,
+            "content_preview_line_count": 1,
+            "content_preview_char_count": len("追加\n"),
         },
         {
             "action": "append_text",
@@ -122,10 +134,63 @@ def test_applier_preview_reports_target_state_bytes_and_risk(tmp_path) -> None:
             "exists": True,
             "content_bytes": len("继续追加\n".encode("utf-8")),
             "risk": "append",
+            "content_preview": "继续追加\n",
+            "content_preview_truncated": False,
+            "content_preview_line_count": 1,
+            "content_preview_char_count": len("继续追加\n"),
         },
     ]
     assert not (tmp_path / "docs" / "new.md").exists()
     assert read_text_utf8(tmp_path / "existing.md") == "旧内容\n"
+
+
+def test_applier_preview_truncates_content_preview_by_lines(tmp_path) -> None:
+    content = "一\n二\n三\n四\n五\n六\n七\n"
+    plan = ExecutionPlan(
+        summary="按行截断",
+        operations=[ExecutionOperation("create_text", "docs/lines.md", content)],
+    )
+
+    result = ExecutionPlanApplier(tmp_path).preview(plan)
+
+    preview = result.preview_changes_as_dicts()[0]
+    assert preview["content_preview"] == "一\n二\n三\n四\n五\n六\n"
+    assert preview["content_preview_truncated"] is True
+    assert preview["content_preview_line_count"] == 7
+    assert preview["content_preview_char_count"] == len(content)
+    assert not (tmp_path / "docs" / "lines.md").exists()
+
+
+def test_applier_preview_truncates_content_preview_by_characters(tmp_path) -> None:
+    content = "中" * 601
+    plan = ExecutionPlan(
+        summary="按字符截断",
+        operations=[ExecutionOperation("create_text", "docs/chars.md", content)],
+    )
+
+    result = ExecutionPlanApplier(tmp_path).preview(plan)
+
+    preview = result.preview_changes_as_dicts()[0]
+    assert preview["content_preview"] == "中" * 600
+    assert preview["content_preview_truncated"] is True
+    assert preview["content_preview_line_count"] == 1
+    assert preview["content_preview_char_count"] == 601
+    assert not (tmp_path / "docs" / "chars.md").exists()
+
+
+def test_applier_preview_reports_empty_content_preview(tmp_path) -> None:
+    plan = ExecutionPlan(
+        summary="空内容",
+        operations=[ExecutionOperation("append_text", "empty.md", "")],
+    )
+
+    result = ExecutionPlanApplier(tmp_path).preview(plan)
+
+    preview = result.preview_changes_as_dicts()[0]
+    assert preview["content_preview"] == ""
+    assert preview["content_preview_truncated"] is False
+    assert preview["content_preview_line_count"] == 0
+    assert preview["content_preview_char_count"] == 0
 
 
 def test_applier_preview_rejects_create_conflict_without_writing(tmp_path) -> None:

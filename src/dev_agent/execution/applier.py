@@ -15,6 +15,8 @@ from dev_agent.tools.git import GitReader
 FORBIDDEN_ROOTS = {".git", ".worktrees", ".superpowers"}
 FORBIDDEN_ROOT_NAMES = {name.casefold() for name in FORBIDDEN_ROOTS}
 SUPPORTED_ACTIONS = {"create_text", "overwrite_text", "append_text"}
+CONTENT_PREVIEW_MAX_LINES = 6
+CONTENT_PREVIEW_MAX_CHARS = 600
 
 
 class ExecutionPlanApplier:
@@ -106,6 +108,25 @@ class ExecutionPlanApplier:
             if parent in planned_files:
                 raise ExecutionPlanError(f"parent path is not a directory: {parent.relative_to(repo_root)}")
 
+    def _content_preview_for_operation(self, operation: ExecutionOperation) -> dict[str, object]:
+        content = operation.content
+        line_parts = content.splitlines(keepends=True)
+        line_count = len(content.splitlines())
+        line_limited = "".join(line_parts[:CONTENT_PREVIEW_MAX_LINES])
+        truncated_by_lines = len(line_parts) > CONTENT_PREVIEW_MAX_LINES
+        if len(line_limited) > CONTENT_PREVIEW_MAX_CHARS:
+            preview = line_limited[:CONTENT_PREVIEW_MAX_CHARS]
+            truncated_by_chars = True
+        else:
+            preview = line_limited
+            truncated_by_chars = False
+        return {
+            "content_preview": preview,
+            "content_preview_truncated": truncated_by_lines or truncated_by_chars,
+            "content_preview_line_count": line_count,
+            "content_preview_char_count": len(content),
+        }
+
     def _preview_changes(self, plan: ExecutionPlan) -> list[ExecutionPreviewChange]:
         self._validate_operations(plan)
         return [
@@ -115,6 +136,7 @@ class ExecutionPlanApplier:
                 exists=self._resolve_target(operation.path).exists(),
                 content_bytes=len(operation.content.encode(UTF8)),
                 risk=self._risk_for_operation(operation),
+                **self._content_preview_for_operation(operation),
             )
             for operation in plan.operations
         ]

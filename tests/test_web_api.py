@@ -139,6 +139,10 @@ def test_preview_provider_plan_task_returns_preview_without_side_effects(tmp_pat
     assert payload["dry_run"] is True
     assert payload["planned_changes"][0]["path"] == "docs/from-web-provider.md"
     assert payload["preview_changes"][0]["risk"] == "create"
+    assert payload["preview_changes"][0]["content_preview"] == "来自 Web provider\n"
+    assert payload["preview_changes"][0]["content_preview_truncated"] is False
+    assert payload["preview_changes"][0]["content_preview_line_count"] == 1
+    assert payload["preview_changes"][0]["content_preview_char_count"] == len("来自 Web provider\n")
     assert payload["applied_changes"] == []
     assert payload["diff_stat"] == ""
     assert payload["execution_error"] is None
@@ -182,6 +186,10 @@ def test_apply_provider_plan_task_writes_file_and_records_history(tmp_path) -> N
     assert payload["dry_run"] is False
     assert payload["task_id"]
     assert payload["preview_changes"][0]["risk"] == "create"
+    assert payload["preview_changes"][0]["content_preview"] == "确认写入\n"
+    assert payload["preview_changes"][0]["content_preview_truncated"] is False
+    assert payload["preview_changes"][0]["content_preview_line_count"] == 1
+    assert payload["preview_changes"][0]["content_preview_char_count"] == len("确认写入\n")
     assert payload["applied_changes"][0]["path"] == "docs/from-web-provider.md"
     assert (tmp_path / "docs" / "from-web-provider.md").read_text(encoding="utf-8") == "确认写入\n"
     history = (tmp_path / ".agent" / "history" / "tasks.jsonl").read_text(encoding="utf-8")

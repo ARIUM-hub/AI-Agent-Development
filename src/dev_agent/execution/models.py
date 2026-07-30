@@ -45,6 +45,10 @@ class ExecutionPreviewChange:
     exists: bool
     content_bytes: int
     risk: str
+    content_preview: str
+    content_preview_truncated: bool
+    content_preview_line_count: int
+    content_preview_char_count: int
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
