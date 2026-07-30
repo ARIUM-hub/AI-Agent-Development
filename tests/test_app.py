@@ -682,6 +682,13 @@ def test_static_app_js_contains_record_detail_hooks(tmp_path):
     assert "data-record-copy-status" in script
     assert "aria-expanded" in script
     assert "收起详情" in script
+    assert "bindRecordCopyActions" in script
+    assert "copyRecordDetails" in script
+    assert "buildRecordDetailCopyText" in script
+    assert "navigator.clipboard.writeText" in script
+    assert "已复制详情" in script
+    assert "复制失败，请手动选择详情文本" in script
+    assert "bindRecordCopyActions(article)" in script
 
 
 def test_styles_cover_record_detail_components(tmp_path):

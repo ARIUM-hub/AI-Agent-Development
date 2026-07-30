@@ -39,6 +39,7 @@ document.addEventListener("DOMContentLoaded", () => {
   bindFilteredExport();
   bindRecordFilters();
   bindRecordDetails(document);
+  bindRecordCopyActions(document);
 });
 
 function bindTabs() {
@@ -290,6 +291,7 @@ function prependRecentRecord(payload) {
   `;
   list.prepend(article);
   bindRecordDetails(article);
+  bindRecordCopyActions(article);
   applyRecordFilters();
 }
 
@@ -514,6 +516,57 @@ function toggleRecordDetail(button) {
   button.setAttribute("aria-expanded", String(!expanded));
   button.textContent = expanded ? "查看详情" : "收起详情";
   detail.hidden = expanded;
+}
+
+function bindRecordCopyActions(root = document) {
+  root.querySelectorAll("[data-record-copy]").forEach((button) => {
+    if (button.dataset.bound === "true") {
+      return;
+    }
+    button.dataset.bound = "true";
+    button.addEventListener("click", () => copyRecordDetails(button));
+  });
+}
+
+async function copyRecordDetails(button) {
+  const record = button.closest(".record");
+  const status = record?.querySelector("[data-record-copy-status]") || null;
+  const text = record ? buildRecordDetailCopyText(record) : "";
+  if (!text || !navigator.clipboard || !navigator.clipboard.writeText) {
+    setRecordCopyStatus(status, "复制失败，请手动选择详情文本", false);
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(text);
+    setRecordCopyStatus(status, "已复制详情", true);
+  } catch (error) {
+    setRecordCopyStatus(status, "复制失败，请手动选择详情文本", false);
+  }
+}
+
+function buildRecordDetailCopyText(record) {
+  const lines = [
+    `平台：${record.dataset.platform || "暂无信息"}`,
+    `记录 ID：${record.dataset.recordId || "暂无信息"}`,
+  ];
+  record.querySelectorAll(".record-detail-grid div").forEach((row) => {
+    const label = row.querySelector("dt")?.textContent.trim();
+    const value = row.querySelector("dd")?.textContent.trim() || "暂无信息";
+    if (label) {
+      lines.push(`${label}：${value}`);
+    }
+  });
+  return lines.join("\n");
+}
+
+function setRecordCopyStatus(status, message, success) {
+  if (!status) {
+    return;
+  }
+  status.textContent = message;
+  status.classList.toggle("is-success", success);
+  status.classList.toggle("is-error", !success);
 }
 
 function recordDetailHtml(recordId, analysis, feedback = null) {
