@@ -141,12 +141,21 @@ def test_static_assets_include_console_interactions(tmp_path) -> None:
     assert "Provider plan 审批" in index_body
     assert "provider-plan-form" in index_body
     assert "confirm-provider-apply" in index_body
+    assert "provider-preview-cards" in index_body
+    assert "原始 JSON" in index_body
     assert css_status == HTTPStatus.OK
     assert css_type == "text/css; charset=utf-8"
     assert "--ink" in css_body
     assert "@media" in css_body
     assert ".approval-layout" in css_body
     assert ".danger" in css_body
+    assert ".preview-card-list" in css_body
+    assert ".preview-card" in css_body
+    assert ".risk-badge" in css_body
+    assert ".risk-overwrite" in css_body
+    assert ".content-preview" in css_body
+    assert ".truncation-note" in css_body
+    assert "overflow-wrap: anywhere" in css_body
     assert js_status == HTTPStatus.OK
     assert js_type == "text/javascript; charset=utf-8"
     assert "loadContext" in js_body
@@ -158,6 +167,13 @@ def test_static_assets_include_console_interactions(tmp_path) -> None:
     assert "需要重新预览" in js_body
     assert "/api/provider-plan/preview" in js_body
     assert "/api/provider-plan/apply" in js_body
+    assert "providerPreviewCards" in js_body
+    assert "renderProviderPreviewCards" in js_body
+    assert "clearProviderPreviewCards" in js_body
+    assert "providerRiskLabel" in js_body
+    assert "providerRiskClass" in js_body
+    assert "content_preview_truncated" in js_body
+    assert "textContent" in js_body
 
 
 def test_provider_plan_preview_route_returns_preview_without_writing(tmp_path) -> None:
