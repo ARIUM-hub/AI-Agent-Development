@@ -334,6 +334,7 @@ function bindSummaryRange() {
 
   select.addEventListener("change", () => {
     loadRecordsSummary();
+    updateExportFilterSummary();
   });
 }
 
@@ -444,6 +445,7 @@ function applySummaryPlatformFilter(platform) {
 
   input.value = value;
   applyRecordFilters();
+  updateExportFilterSummary();
 
   const recentRecords = document.getElementById("recent-records");
   const target = recentRecords?.closest("section") || recentRecords;
@@ -493,6 +495,53 @@ function buildFilteredExportUrl() {
 
   const queryString = params.toString();
   return queryString ? `/api/records/export.csv?${queryString}` : "/api/records/export.csv";
+}
+
+function exportRangeLabel(value) {
+  const rangeLabels = {
+    all: "全部记录",
+    "7d": "最近 7 天",
+    "30d": "最近 30 天",
+  };
+  return rangeLabels[value] || rangeLabels.all;
+}
+
+function updateExportFilterSummary() {
+  const summary = document.getElementById("export-filter-summary");
+  if (!summary) {
+    return;
+  }
+
+  const query = document.getElementById("record-search")?.value.trim() || "";
+  const platform = document.getElementById("platform-filter")?.value.trim() || "";
+  const issue = document.getElementById("issue-filter")?.value || "";
+  const responsibility = document.getElementById("responsibility-filter")?.value || "";
+  const feedback = document.getElementById("feedback-filter")?.value || "";
+  const range = document.getElementById("summary-range")?.value || "all";
+  const conditions = [];
+
+  if (platform) {
+    conditions.push(`平台：${platform}`);
+  }
+  if (query) {
+    conditions.push(`关键词：${query}`);
+  }
+  if (issue) {
+    conditions.push(`问题类型：${labelFor("issue_category", issue)}`);
+  }
+  if (responsibility) {
+    conditions.push(`责任方：${labelFor("responsibility", responsibility)}`);
+  }
+  if (feedback) {
+    conditions.push(`复核状态：${labelFor("feedback", feedback)}`);
+  }
+  if (range !== "all") {
+    conditions.push(`时间：${exportRangeLabel(range)}`);
+  }
+
+  summary.textContent = conditions.length
+    ? `筛选导出将应用：${conditions.join("；")}`
+    : "将导出全部记录";
 }
 
 function bindRecordDetails(root = document) {
@@ -623,8 +672,14 @@ function bindRecordFilters() {
     return;
   }
 
-  form.addEventListener("input", () => applyRecordFilters());
-  form.addEventListener("change", () => applyRecordFilters());
+  form.addEventListener("input", () => {
+    applyRecordFilters();
+    updateExportFilterSummary();
+  });
+  form.addEventListener("change", () => {
+    applyRecordFilters();
+    updateExportFilterSummary();
+  });
 
   const reset = form.querySelector("[data-filter-reset]");
   if (reset) {
@@ -632,6 +687,7 @@ function bindRecordFilters() {
   }
 
   applyRecordFilters();
+  updateExportFilterSummary();
 }
 
 function applyRecordFilters() {
@@ -657,6 +713,7 @@ function applyRecordFilters() {
 function resetRecordFilters(form) {
   form.reset();
   applyRecordFilters();
+  updateExportFilterSummary();
 }
 
 function recordMatchesFilters(record, filters) {

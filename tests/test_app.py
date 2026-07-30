@@ -358,6 +358,12 @@ def test_static_app_js_contains_recent_record_filter_hooks(tmp_path):
     assert "platform-filter" in script
     assert "matchesPlatform" in script
     assert "filters.platform" in script
+    assert "updateExportFilterSummary" in script
+    assert "export-filter-summary" in script
+    assert "将导出全部记录" in script
+    assert "筛选导出将应用" in script
+    assert "updateExportFilterSummary();" in script
+    assert 'labelFor("issue_category", issue)' in script
 
 
 def test_styles_cover_recent_record_filter_components(tmp_path):
@@ -537,6 +543,9 @@ def test_static_app_js_contains_filtered_export_hooks(tmp_path):
     assert "feedback_status" in script
     assert "platform-filter" in script
     assert 'params.set("platform", platform)' in script
+    assert "时间" in script
+    assert "最近 7 天" in script
+    assert "最近 30 天" in script
 
 
 def _stored_record(record_id: str, *, platform: str, created_at: datetime, issue_category: str = "function_use") -> dict:
@@ -638,6 +647,7 @@ def test_static_app_js_contains_summary_range_hooks(tmp_path):
     assert "summary-range" in script
     assert 'params.set("range", range)' in script
     assert 'params.set("range", summaryRange)' in script
+    assert "updateExportFilterSummary();" in script
 
 
 def test_recent_records_include_expandable_detail_markup(tmp_path):
