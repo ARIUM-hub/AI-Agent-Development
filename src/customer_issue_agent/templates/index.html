@@ -161,6 +161,7 @@
             </label>
             <button class="secondary-action" type="button" data-filter-export>导出筛选 CSV</button>
             <button class="secondary-action" type="button" data-filter-reset>清空</button>
+            <p id="export-filter-summary" class="export-filter-summary" aria-live="polite">将导出全部记录</p>
             <p id="filter-count" class="filter-count" aria-live="polite">当前显示 {{ records|length }} / {{ records|length }} 条</p>
           </form>
           <p id="filter-empty" class="filter-empty" hidden>没有符合条件的记录。</p>

@@ -317,6 +317,10 @@ def test_index_contains_recent_record_filter_controls(tmp_path):
     assert 'id="filter-count"' in html
     assert 'id="filter-empty"' in html
     assert 'data-filter-reset' in html
+    assert 'id="export-filter-summary"' in html
+    assert 'class="export-filter-summary"' in html
+    assert 'aria-live="polite"' in html
+    assert "将导出全部记录" in html
 
 
 def test_recent_records_include_filter_data_attributes(tmp_path):
