@@ -232,6 +232,15 @@ def test_static_assets_include_console_interactions(tmp_path) -> None:
     assert ".history-status-passed" in css_body
     assert ".history-status-failed" in css_body
     assert ".history-detail" in css_body
+    assert ".context-card-list" in css_body
+    assert ".context-card" in css_body
+    assert ".context-project-card" in css_body
+    assert ".context-git-clean" in css_body
+    assert ".context-git-changed" in css_body
+    assert ".context-status-badge" in css_body
+    assert ".context-command-row" in css_body
+    assert ".context-copy-button" in css_body
+    assert ".context-rule-detail" in css_body
     assert "overflow-wrap: anywhere" in css_body
     assert js_status == HTTPStatus.OK
     assert js_type == "text/javascript; charset=utf-8"
