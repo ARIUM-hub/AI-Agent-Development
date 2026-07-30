@@ -57,6 +57,15 @@ const clearProviderError = () => {
   providerError().textContent = "";
 };
 
+const resetProviderPreview = () => {
+  if (lastProviderPreview === null) {
+    return;
+  }
+  lastProviderPreview = null;
+  providerStatus().textContent = "内容已变化，需要重新预览";
+  providerApplyButton().disabled = true;
+};
+
 const postJson = async (path, payload) => {
   const response = await fetch(path, {
     method: "POST",
@@ -107,10 +116,12 @@ async function submitProviderApply() {
     });
     renderJson("provider-apply-result", payload);
     providerStatus().textContent = payload.execution_error ? "执行失败" : "执行完成";
+    lastProviderPreview = null;
     await loadHistory();
   } catch (error) {
     renderJson("provider-apply-result", "执行失败。");
     providerStatus().textContent = "执行失败";
+    lastProviderPreview = null;
     showProviderError(error.message);
   } finally {
     setProviderBusy(false);
@@ -119,6 +130,7 @@ async function submitProviderApply() {
 
 document.getElementById("run-form").addEventListener("submit", submitRun);
 providerForm().addEventListener("submit", submitProviderPreview);
+providerForm().addEventListener("input", resetProviderPreview);
 providerApplyButton().addEventListener("click", submitProviderApply);
 loadHealth();
 loadContext();

@@ -24,7 +24,9 @@ def build_health_payload(repo_root: Path) -> dict[str, object]:
         "encoding": UTF8,
         "capabilities": {
             "web_console": True,
-            "dry_run_only": True,
+            "dry_run_only": False,
+            "provider_plan_preview": True,
+            "provider_plan_apply": True,
             "real_model_calls": False,
         },
     }

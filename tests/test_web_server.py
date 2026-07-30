@@ -153,6 +153,9 @@ def test_static_assets_include_console_interactions(tmp_path) -> None:
     assert "submitRun" in js_body
     assert "submitProviderPreview" in js_body
     assert "submitProviderApply" in js_body
+    assert "resetProviderPreview" in js_body
+    assert 'providerForm().addEventListener("input", resetProviderPreview)' in js_body
+    assert "需要重新预览" in js_body
     assert "/api/provider-plan/preview" in js_body
     assert "/api/provider-plan/apply" in js_body
 
@@ -213,3 +216,59 @@ def test_provider_plan_preview_route_rejects_bad_json(tmp_path) -> None:
     assert content_type == "application/json; charset=utf-8"
     assert payload["ok"] is False
     assert "无法解析 provider 执行计划" in payload["error"]
+
+
+def test_provider_plan_preview_route_rejects_dangerous_path(tmp_path) -> None:
+    server, base_url = start_server(tmp_path)
+    try:
+        status, content_type, payload = post_json(
+            f"{base_url}/api/provider-plan/preview",
+            provider_plan_payload(path="../escape.md"),
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert status == HTTPStatus.BAD_REQUEST
+    assert content_type == "application/json; charset=utf-8"
+    assert payload["ok"] is False
+    assert "执行计划预览失败" in payload["error"]
+    assert not (tmp_path.parent / "escape.md").exists()
+
+
+def test_provider_plan_apply_route_rejects_bad_json_without_writing(tmp_path) -> None:
+    server, base_url = start_server(tmp_path)
+    try:
+        status, content_type, payload = post_json(
+            f"{base_url}/api/provider-plan/apply",
+            {"request": "坏 apply route", "fake_response": '{"summary":'},
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert status == HTTPStatus.BAD_REQUEST
+    assert content_type == "application/json; charset=utf-8"
+    assert payload["ok"] is False
+    assert "无法解析 provider 执行计划" in payload["error"]
+    assert not (tmp_path / ".agent").exists()
+
+
+def test_provider_plan_apply_route_rejects_create_conflict_without_writing(tmp_path) -> None:
+    write_text_utf8(tmp_path / "docs" / "from-web-route.md", "已存在\n")
+    server, base_url = start_server(tmp_path)
+    try:
+        status, content_type, payload = post_json(
+            f"{base_url}/api/provider-plan/apply",
+            provider_plan_payload(),
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert status == HTTPStatus.BAD_REQUEST
+    assert content_type == "application/json; charset=utf-8"
+    assert payload["ok"] is False
+    assert "执行计划预览失败" in payload["error"]
+    assert (tmp_path / "docs" / "from-web-route.md").read_text(encoding="utf-8") == "已存在\n"
+    assert not (tmp_path / ".agent").exists()

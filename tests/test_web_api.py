@@ -27,7 +27,10 @@ def test_build_health_payload_reports_local_web_capability(tmp_path) -> None:
     assert payload["encoding"] == "utf-8"
     assert payload["cwd"] == str(tmp_path)
     assert payload["capabilities"]["web_console"] is True
-    assert payload["capabilities"]["dry_run_only"] is True
+    assert payload["capabilities"]["dry_run_only"] is False
+    assert payload["capabilities"]["provider_plan_preview"] is True
+    assert payload["capabilities"]["provider_plan_apply"] is True
+    assert payload["capabilities"]["real_model_calls"] is False
 
 
 def test_build_context_payload_combines_scan_git_rules_and_verification(tmp_path) -> None:
