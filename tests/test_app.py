@@ -152,6 +152,9 @@ def test_styles_cover_enhanced_workbench_components(tmp_path):
     assert ".result-grid" in css
     assert ".result-card" in css
     assert ".form-message.is-visible" in css
+    assert ".batch-summary" in css
+    assert ".batch-summary-grid" in css
+    assert ".batch-summary-card" in css
     assert "@media (max-width: 720px)" in css
 
 

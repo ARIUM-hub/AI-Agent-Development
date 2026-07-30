@@ -443,6 +443,34 @@ textarea:focus-visible {
   margin-top: 16px;
 }
 
+.batch-summary {
+  display: grid;
+  gap: 14px;
+  margin: 18px 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.batch-summary-header h3 {
+  margin: 4px 0 0;
+  font-size: 18px;
+}
+
+.batch-summary-metrics {
+  margin: 0;
+}
+
+.batch-summary-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.batch-summary-card h4 {
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+
 .batch-list {
   display: grid;
   gap: 16px;
@@ -594,6 +622,7 @@ textarea:focus-visible {
   .tabs,
   .summary-strip,
   .result-grid,
+  .batch-summary-grid,
   .record-detail-grid {
     grid-template-columns: 1fr;
   }
