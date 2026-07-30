@@ -377,6 +377,7 @@ function renderRecordsSummary(summary) {
       ${summaryDistribution("复核状态", "feedback", summary.feedback_statuses)}
     </div>
   `;
+  bindSummaryPlatformFilters(container);
 }
 
 function summaryMetric(label, value) {
@@ -392,7 +393,7 @@ function summaryDistribution(title, labelGroup, items = []) {
   const rows = items.length
     ? items.map((item) => `
         <li>
-          <span>${escapeHtml(labelFor(labelGroup, item.value))}</span>
+          ${summaryDistributionLabel(labelGroup, item.value)}
           <strong>${escapeHtml(item.count)}</strong>
         </li>
       `).join("")
@@ -404,6 +405,49 @@ function summaryDistribution(title, labelGroup, items = []) {
       <ul class="distribution-list">${rows}</ul>
     </article>
   `;
+}
+
+function summaryDistributionLabel(labelGroup, value) {
+  const label = labelFor(labelGroup, value);
+  if (labelGroup !== "platform") {
+    return `<span>${escapeHtml(label)}</span>`;
+  }
+  return `
+    <button
+      class="summary-filter-link"
+      type="button"
+      data-summary-platform-filter="${escapeHtml(value)}"
+    >${escapeHtml(label)}</button>
+  `;
+}
+
+function bindSummaryPlatformFilters(root = document) {
+  root.querySelectorAll("[data-summary-platform-filter]").forEach((button) => {
+    if (button.dataset.bound === "true") {
+      return;
+    }
+    button.dataset.bound = "true";
+    button.addEventListener("click", () => {
+      applySummaryPlatformFilter(button.dataset.summaryPlatformFilter || "");
+    });
+  });
+}
+
+function applySummaryPlatformFilter(platform) {
+  const value = platform.trim();
+  const input = document.getElementById("platform-filter");
+  if (!value || !input) {
+    return;
+  }
+
+  input.value = value;
+  applyRecordFilters();
+
+  const recentRecords = document.getElementById("recent-records");
+  const target = recentRecords?.closest("section") || recentRecords;
+  if (target) {
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 }
 
 function bindFilteredExport() {

@@ -437,6 +437,10 @@ def test_static_app_js_contains_summary_dashboard_hooks(tmp_path):
     assert "summaryDistribution" in script
     assert "平台分布" in script
     assert "summary.platforms" in script
+    assert "bindSummaryPlatformFilters" in script
+    assert "applySummaryPlatformFilter" in script
+    assert "data-summary-platform-filter" in script
+    assert "scrollIntoView" in script
 
 
 def test_styles_cover_summary_dashboard_components(tmp_path):
