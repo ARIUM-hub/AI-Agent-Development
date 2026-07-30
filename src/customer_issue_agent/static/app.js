@@ -40,6 +40,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadRecordsSummary();
   bindFilteredExport();
   bindRecordFilters();
+  bindReviewQueueToggle();
   bindRecordDetails(document);
   bindRecordCopyActions(document);
 });
@@ -294,7 +295,7 @@ function prependRecentRecord(payload) {
   list.prepend(article);
   bindRecordDetails(article);
   bindRecordCopyActions(article);
-  applyRecordFilters();
+  refreshRecordFilterViews();
 }
 
 function resultCard(title, body) {
@@ -336,8 +337,7 @@ function bindSummaryRange() {
 
   select.addEventListener("change", () => {
     loadRecordsSummary();
-    updateExportFilterSummary();
-    updateExportCountPreview();
+    refreshRecordFilterViews();
   });
 }
 
@@ -447,9 +447,7 @@ function applySummaryPlatformFilter(platform) {
   }
 
   input.value = value;
-  applyRecordFilters();
-  updateExportFilterSummary();
-  updateExportCountPreview();
+  refreshRecordFilterViews();
 
   const recentRecords = document.getElementById("recent-records");
   const target = recentRecords?.closest("section") || recentRecords;
@@ -585,6 +583,51 @@ async function updateExportCountPreview() {
   }
 }
 
+function refreshRecordFilterViews() {
+  applyRecordFilters();
+  updateExportFilterSummary();
+  updateExportCountPreview();
+  updateReviewQueueToggle();
+}
+
+function bindReviewQueueToggle() {
+  const button = document.querySelector("[data-review-queue-toggle]");
+  if (!button) {
+    return;
+  }
+
+  button.addEventListener("click", () => toggleReviewQueueFilter());
+  updateReviewQueueToggle();
+}
+
+function toggleReviewQueueFilter() {
+  const feedbackFilter = document.getElementById("feedback-filter");
+  if (!feedbackFilter) {
+    return;
+  }
+
+  if (feedbackFilter.value === "unreviewed") {
+    feedbackFilter.value = "";
+  } else {
+    feedbackFilter.value = "unreviewed";
+  }
+  refreshRecordFilterViews();
+}
+
+function updateReviewQueueToggle() {
+  const button = document.querySelector("[data-review-queue-toggle]");
+  if (!button) {
+    return;
+  }
+
+  const feedbackFilter = document.getElementById("feedback-filter");
+  const pendingCount = document.querySelectorAll('#recent-records .record[data-feedback-status="unreviewed"]').length;
+  const active = feedbackFilter?.value === "unreviewed";
+  button.textContent = `只看待复核（${pendingCount}）`;
+  button.classList.toggle("is-active", active);
+  button.setAttribute("aria-pressed", String(active));
+}
+
 function bindRecordDetails(root = document) {
   root.querySelectorAll("[data-record-detail-toggle]").forEach((button) => {
     if (button.dataset.bound === "true") {
@@ -714,14 +757,10 @@ function bindRecordFilters() {
   }
 
   form.addEventListener("input", () => {
-    applyRecordFilters();
-    updateExportFilterSummary();
-    updateExportCountPreview();
+    refreshRecordFilterViews();
   });
   form.addEventListener("change", () => {
-    applyRecordFilters();
-    updateExportFilterSummary();
-    updateExportCountPreview();
+    refreshRecordFilterViews();
   });
 
   const reset = form.querySelector("[data-filter-reset]");
@@ -729,9 +768,7 @@ function bindRecordFilters() {
     reset.addEventListener("click", () => resetRecordFilters(form));
   }
 
-  applyRecordFilters();
-  updateExportFilterSummary();
-  updateExportCountPreview();
+  refreshRecordFilterViews();
 }
 
 function applyRecordFilters() {
@@ -756,9 +793,7 @@ function applyRecordFilters() {
 
 function resetRecordFilters(form) {
   form.reset();
-  applyRecordFilters();
-  updateExportFilterSummary();
-  updateExportCountPreview();
+  refreshRecordFilterViews();
 }
 
 function recordMatchesFilters(record, filters) {

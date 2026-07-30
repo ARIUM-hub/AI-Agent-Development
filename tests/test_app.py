@@ -372,6 +372,17 @@ def test_static_app_js_contains_recent_record_filter_hooks(tmp_path):
     assert "updateExportFilterSummary();" in script
     assert 'labelFor("issue_category", issue)' in script
     assert "updateExportCountPreview();" in script
+    assert "bindReviewQueueToggle" in script
+    assert "toggleReviewQueueFilter" in script
+    assert "updateReviewQueueToggle" in script
+    assert "refreshRecordFilterViews" in script
+    assert "data-review-queue-toggle" in script
+    assert 'feedbackFilter.value = "unreviewed"' in script
+    assert 'feedbackFilter.value = ""' in script
+    assert 'aria-pressed' in script
+    assert "is-active" in script
+    assert "只看待复核" in script
+    assert 'data-feedback-status="unreviewed"' in script
 
 
 def test_styles_cover_recent_record_filter_components(tmp_path):
@@ -704,6 +715,7 @@ def test_static_app_js_contains_summary_range_hooks(tmp_path):
     assert 'params.set("range", summaryRange)' in script
     assert "updateExportFilterSummary();" in script
     assert "updateExportCountPreview();" in script
+    assert "refreshRecordFilterViews();" in script
 
 
 def test_recent_records_include_expandable_detail_markup(tmp_path):
