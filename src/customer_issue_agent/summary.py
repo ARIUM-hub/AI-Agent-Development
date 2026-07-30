@@ -5,6 +5,7 @@ from typing import Any
 
 
 def build_records_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
+    platforms: Counter[str] = Counter()
     issue_categories: Counter[str] = Counter()
     responsibilities: Counter[str] = Counter()
     evidence_strengths: Counter[str] = Counter()
@@ -13,7 +14,10 @@ def build_records_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
     corrected_records = 0
 
     for record in records:
-        attribution = ((record.get("analysis") or {}).get("attribution") or {})
+        analysis = record.get("analysis") or {}
+        request = analysis.get("request") or {}
+        attribution = analysis.get("attribution") or {}
+        platforms[_value(request.get("platform"))] += 1
         issue_categories[_value(attribution.get("issue_category"))] += 1
         responsibilities[_value(attribution.get("primary_responsibility"))] += 1
         evidence_strengths[_value(attribution.get("evidence_strength"))] += 1
@@ -29,6 +33,7 @@ def build_records_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
         "total_records": len(records),
         "reviewed_records": reviewed_records,
         "corrected_records": corrected_records,
+        "platforms": _rank(platforms),
         "issue_categories": _rank(issue_categories),
         "responsibilities": _rank(responsibilities),
         "evidence_strengths": _rank(evidence_strengths),

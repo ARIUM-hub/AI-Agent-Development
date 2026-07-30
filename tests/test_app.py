@@ -381,6 +381,7 @@ def test_records_summary_endpoint_returns_counts(tmp_path):
     assert payload["total_records"] == 1
     assert payload["reviewed_records"] == 1
     assert payload["corrected_records"] == 1
+    assert payload["platforms"] == [{"value": "Amazon", "count": 1}]
     assert payload["issue_categories"]
     assert payload["responsibilities"]
     assert payload["evidence_strengths"]
@@ -398,6 +399,7 @@ def test_records_summary_endpoint_returns_empty_summary(tmp_path):
     assert payload["total_records"] == 0
     assert payload["reviewed_records"] == 0
     assert payload["corrected_records"] == 0
+    assert payload["platforms"] == []
     assert payload["issue_categories"] == []
 
 
@@ -564,6 +566,7 @@ def test_records_summary_endpoint_filters_by_time_range(tmp_path):
     assert response.status_code == 200
     payload = response.json()
     assert payload["total_records"] == 1
+    assert payload["platforms"] == [{"value": "Amazon", "count": 1}]
     assert payload["issue_categories"] == [{"value": "function_use", "count": 1}]
 
 
