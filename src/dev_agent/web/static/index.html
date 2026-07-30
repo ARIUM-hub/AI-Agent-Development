@@ -37,6 +37,40 @@
           </form>
           <pre id="run-result" aria-live="polite">等待提交...</pre>
         </article>
+        <article class="panel run-panel">
+          <h2>Provider plan 审批</h2>
+          <p class="helper">两步式安全流程：先生成预览，不写文件；确认执行后才应用结构化计划。</p>
+          <form id="provider-plan-form">
+            <div class="approval-layout">
+              <div>
+                <label for="provider-request">任务</label>
+                <textarea id="provider-request" name="request" required>创建 Web provider 说明文件。</textarea>
+                <label for="provider-fake-response">严格 JSON provider plan</label>
+                <textarea id="provider-fake-response" name="fake_response" required>{
+  "summary": "创建 Web provider 说明",
+  "operations": [
+    {
+      "action": "create_text",
+      "path": "docs/web-provider.md",
+      "content": "来自 Web provider plan\n"
+    }
+  ]
+}</textarea>
+                <div class="button-row">
+                  <button id="preview-provider-plan" type="submit">生成预览</button>
+                  <button id="confirm-provider-apply" type="button" disabled>确认执行</button>
+                </div>
+              </div>
+              <div>
+                <h3>审批状态</h3>
+                <p id="provider-status" class="status-pill">等待预览</p>
+                <pre id="provider-preview-result" aria-live="polite">等待 provider plan 预览...</pre>
+                <pre id="provider-apply-result" aria-live="polite">确认执行后显示结果。</pre>
+                <p id="provider-error" class="danger" role="alert" hidden></p>
+              </div>
+            </div>
+          </form>
+        </article>
       </section>
     </main>
     <script src="/static/app.js"></script>

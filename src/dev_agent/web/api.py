@@ -3,6 +3,10 @@ from pathlib import Path
 from dev_agent import __version__
 from dev_agent.config.loader import load_agent_context
 from dev_agent.encoding import UTF8
+from dev_agent.execution.applier import ExecutionPlanApplier
+from dev_agent.execution.models import ExecutionPlan, ExecutionResult
+from dev_agent.execution.plan import ExecutionPlanError
+from dev_agent.execution.provider_plan import parse_provider_execution_plan
 from dev_agent.memory.store import MemoryStore
 from dev_agent.project.scanner import scan_project
 from dev_agent.providers.base import FakeProvider
@@ -20,7 +24,9 @@ def build_health_payload(repo_root: Path) -> dict[str, object]:
         "encoding": UTF8,
         "capabilities": {
             "web_console": True,
-            "dry_run_only": True,
+            "dry_run_only": False,
+            "provider_plan_preview": True,
+            "provider_plan_apply": True,
             "real_model_calls": False,
         },
     }
@@ -67,6 +73,101 @@ def build_context_payload(repo_root: Path, home_dir: Path) -> dict[str, object]:
 def build_history_payload(repo_root: Path) -> dict[str, object]:
     tasks = MemoryStore(repo_root).list_tasks()
     return {"tasks": [task.to_dict() for task in tasks]}
+
+
+def _planned_changes(plan: ExecutionPlan) -> list[dict[str, object]]:
+    return [operation.to_dict() for operation in plan.operations]
+
+
+def _provider_preview(repo_root: Path, fake_response: str) -> tuple[ExecutionPlan, ExecutionResult]:
+    try:
+        plan = parse_provider_execution_plan(fake_response)
+        preview = ExecutionPlanApplier(repo_root).preview(plan)
+    except ExecutionPlanError as exc:
+        message = str(exc)
+        if message.startswith("无法解析 provider 执行计划"):
+            raise ValueError(message) from exc
+        raise ValueError(f"执行计划预览失败：{message}") from exc
+    return plan, preview
+
+
+def _provider_plan_payload(
+    *,
+    ok: bool,
+    task_id: str | None,
+    plan_text: str,
+    dry_run: bool,
+    planned_changes: list[dict[str, object]],
+    preview_result: ExecutionResult,
+    applied_changes: list[dict[str, object]] | None = None,
+    diff_stat: str = "",
+    execution_error: str | None = None,
+) -> dict[str, object]:
+    return {
+        "ok": ok,
+        "task_id": task_id,
+        "plan_text": plan_text,
+        "dry_run": dry_run,
+        "planned_changes": planned_changes,
+        "preview_changes": preview_result.preview_changes_as_dicts(),
+        "applied_changes": applied_changes or [],
+        "diff_stat": diff_stat,
+        "execution_error": execution_error,
+    }
+
+
+def preview_provider_plan_task(repo_root: Path, request_text: str, fake_response: str) -> dict[str, object]:
+    if not request_text.strip():
+        raise ValueError("request_text is required")
+    if not fake_response.strip():
+        raise ValueError("fake_response is required for provider plan preview")
+    plan, preview = _provider_preview(repo_root, fake_response)
+    return _provider_plan_payload(
+        ok=True,
+        task_id=None,
+        plan_text="",
+        dry_run=True,
+        planned_changes=_planned_changes(plan),
+        preview_result=preview,
+    )
+
+
+def apply_provider_plan_task(
+    repo_root: Path,
+    home_dir: Path,
+    request_text: str,
+    fake_response: str,
+) -> dict[str, object]:
+    if not request_text.strip():
+        raise ValueError("request_text is required")
+    if not fake_response.strip():
+        raise ValueError("fake_response is required for provider plan apply")
+    plan, preview = _provider_preview(repo_root, fake_response)
+    runner = LocalTaskRunner(
+        repo_root=repo_root,
+        home_dir=home_dir,
+        provider=FakeProvider(name="fake-web-provider-plan", responses=[fake_response]),
+    )
+    result = runner.run(
+        request_text,
+        TaskRunOptions(
+            dry_run=False,
+            run_verification=False,
+            apply_changes=True,
+            execution_plan=plan,
+        ),
+    )
+    return _provider_plan_payload(
+        ok=True,
+        task_id=result.task_id,
+        plan_text=result.plan_text,
+        dry_run=result.dry_run,
+        planned_changes=result.planned_changes,
+        preview_result=preview,
+        applied_changes=result.applied_changes,
+        diff_stat=result.diff_stat,
+        execution_error=result.execution_error,
+    )
 
 
 def run_dry_run_task(
