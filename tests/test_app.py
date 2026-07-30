@@ -367,6 +367,7 @@ def test_static_app_js_contains_recent_record_filter_hooks(tmp_path):
     assert "筛选导出将应用" in script
     assert "updateExportFilterSummary();" in script
     assert 'labelFor("issue_category", issue)' in script
+    assert "updateExportCountPreview();" in script
 
 
 def test_styles_cover_recent_record_filter_components(tmp_path):
@@ -550,6 +551,14 @@ def test_static_app_js_contains_filtered_export_hooks(tmp_path):
     assert "时间" in script
     assert "最近 7 天" in script
     assert "最近 30 天" in script
+    assert "buildExportFilterParams" in script
+    assert "buildExportCountPreviewUrl" in script
+    assert "updateExportCountPreview" in script
+    assert "/api/records/export-count" in script
+    assert "export-count-preview" in script
+    assert "预计导出" in script
+    assert "预计数量暂不可用" in script
+    assert "latestExportCountRequestId" in script
 
 
 def _stored_record(record_id: str, *, platform: str, created_at: datetime, issue_category: str = "function_use") -> dict:
@@ -689,6 +698,7 @@ def test_static_app_js_contains_summary_range_hooks(tmp_path):
     assert 'params.set("range", range)' in script
     assert 'params.set("range", summaryRange)' in script
     assert "updateExportFilterSummary();" in script
+    assert "updateExportCountPreview();" in script
 
 
 def test_recent_records_include_expandable_detail_markup(tmp_path):

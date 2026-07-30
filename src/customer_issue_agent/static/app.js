@@ -28,6 +28,8 @@ const labels = {
   },
 };
 
+let latestExportCountRequestId = 0;
+
 document.addEventListener("DOMContentLoaded", () => {
   bindTabs();
   bindAnalysisForm("paste-form", "paste-error");
@@ -335,6 +337,7 @@ function bindSummaryRange() {
   select.addEventListener("change", () => {
     loadRecordsSummary();
     updateExportFilterSummary();
+    updateExportCountPreview();
   });
 }
 
@@ -446,6 +449,7 @@ function applySummaryPlatformFilter(platform) {
   input.value = value;
   applyRecordFilters();
   updateExportFilterSummary();
+  updateExportCountPreview();
 
   const recentRecords = document.getElementById("recent-records");
   const target = recentRecords?.closest("section") || recentRecords;
@@ -465,7 +469,7 @@ function bindFilteredExport() {
   });
 }
 
-function buildFilteredExportUrl() {
+function buildExportFilterParams() {
   const params = new URLSearchParams();
   const summaryRange = document.getElementById("summary-range")?.value || "all";
   const query = document.getElementById("record-search")?.value.trim() || "";
@@ -492,9 +496,19 @@ function buildFilteredExportUrl() {
   if (feedback) {
     params.set("feedback_status", feedback);
   }
+  return params;
+}
 
+function buildFilteredExportUrl() {
+  const params = buildExportFilterParams();
   const queryString = params.toString();
   return queryString ? `/api/records/export.csv?${queryString}` : "/api/records/export.csv";
+}
+
+function buildExportCountPreviewUrl() {
+  const params = buildExportFilterParams();
+  const queryString = params.toString();
+  return queryString ? `/api/records/export-count?${queryString}` : "/api/records/export-count";
 }
 
 function exportRangeLabel(value) {
@@ -542,6 +556,33 @@ function updateExportFilterSummary() {
   summary.textContent = conditions.length
     ? `筛选导出将应用：${conditions.join("；")}`
     : "将导出全部记录";
+}
+
+async function updateExportCountPreview() {
+  const preview = document.getElementById("export-count-preview");
+  if (!preview) {
+    return;
+  }
+
+  const requestId = latestExportCountRequestId + 1;
+  latestExportCountRequestId = requestId;
+  preview.textContent = "预计导出数量加载中...";
+
+  try {
+    const response = await fetch(buildExportCountPreviewUrl());
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(readError(payload));
+    }
+    if (requestId !== latestExportCountRequestId) {
+      return;
+    }
+    preview.textContent = `预计导出 ${payload.count} 条`;
+  } catch (error) {
+    if (requestId === latestExportCountRequestId) {
+      preview.textContent = "预计数量暂不可用";
+    }
+  }
 }
 
 function bindRecordDetails(root = document) {
@@ -675,10 +716,12 @@ function bindRecordFilters() {
   form.addEventListener("input", () => {
     applyRecordFilters();
     updateExportFilterSummary();
+    updateExportCountPreview();
   });
   form.addEventListener("change", () => {
     applyRecordFilters();
     updateExportFilterSummary();
+    updateExportCountPreview();
   });
 
   const reset = form.querySelector("[data-filter-reset]");
@@ -688,6 +731,7 @@ function bindRecordFilters() {
 
   applyRecordFilters();
   updateExportFilterSummary();
+  updateExportCountPreview();
 }
 
 function applyRecordFilters() {
@@ -714,6 +758,7 @@ function resetRecordFilters(form) {
   form.reset();
   applyRecordFilters();
   updateExportFilterSummary();
+  updateExportCountPreview();
 }
 
 function recordMatchesFilters(record, filters) {
