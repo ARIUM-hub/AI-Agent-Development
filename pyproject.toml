@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "customer-issue-agent"
+version = "0.1.0"
+description = "Local workbench for overseas e-commerce customer usage issue attribution"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.111",
+  "jinja2>=3.1",
+  "openpyxl>=3.1",
+  "pydantic>=2.7",
+  "python-multipart>=0.0.9",
+  "uvicorn[standard]>=0.30"
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.27",
+  "pytest>=8.2"
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+customer_issue_agent = ["templates/*.html", "static/*.css"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+filterwarnings = [
+  "ignore:Using `httpx` with `starlette.testclient` is deprecated:starlette.exceptions.StarletteDeprecationWarning"
+]

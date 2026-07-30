@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>客户使用问题归因智能体</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="/static/app.js" defer></script>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="workbench">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">海外电商 · 客服会话分析</p>
+            <h1>客户使用问题归因智能体</h1>
+            <p class="subtitle">粘贴或上传客服会话，生成客户问题、业务原因、责任方和下一步建议。</p>
+          </div>
+          <span class="status">本地规则模式</span>
+        </header>
+
+        <section class="workspace-grid">
+          <div class="input-stack">
+            <div class="tabs" role="tablist" aria-label="输入方式">
+              <button class="tab is-active" type="button" role="tab" aria-selected="true" aria-controls="paste-panel" data-tab-target="paste-panel">粘贴会话</button>
+              <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="upload-panel" data-tab-target="upload-panel">上传文件</button>
+              <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="batch-panel" data-tab-target="batch-panel">批量上传</button>
+            </div>
+
+            <form id="paste-form" class="panel input-panel" method="post" action="/api/analyze" data-endpoint="/api/analyze">
+              <div class="field">
+                <label for="paste-platform">平台来源</label>
+                <input id="paste-platform" name="platform" list="platform-presets" value="Other overseas platform">
+              </div>
+
+              <div id="paste-panel" class="tab-panel" role="tabpanel">
+                <div class="field">
+                  <label for="conversation_text">客服会话</label>
+                  <textarea id="conversation_text" name="conversation_text" rows="12" placeholder="Customer: I followed the instructions but it still will not connect.&#10;Agent: Please try again later."></textarea>
+                </div>
+                <p id="paste-error" class="form-message" role="alert" aria-live="polite"></p>
+                <button class="primary-action" type="submit" data-loading-label="分析中...">分析会话</button>
+              </div>
+            </form>
+
+            <form id="upload-form" class="panel input-panel is-hidden" method="post" action="/api/analyze-file" enctype="multipart/form-data" data-endpoint="/api/analyze-file">
+              <div class="field">
+                <label for="upload-platform">平台来源</label>
+                <input id="upload-platform" name="platform" list="platform-presets" value="Other overseas platform">
+              </div>
+
+              <div id="upload-panel" class="tab-panel" role="tabpanel" hidden>
+                <div class="field">
+                  <label for="conversation-file">客服会话文件</label>
+                  <input id="conversation-file" name="file" type="file" accept=".txt,.log,.csv,.xlsx,.xlsm">
+                  <p class="helper">支持 txt、log、csv、xlsx、xlsm。</p>
+                </div>
+                <p id="upload-error" class="form-message" role="alert" aria-live="polite"></p>
+                <button class="primary-action" type="submit" data-loading-label="上传分析中...">上传并分析</button>
+              </div>
+            </form>
+
+            <form id="batch-form" class="panel input-panel is-hidden" method="post" action="/api/analyze-batch-file" enctype="multipart/form-data" data-endpoint="/api/analyze-batch-file">
+              <div class="field">
+                <label for="batch-platform">平台来源</label>
+                <input id="batch-platform" name="platform" list="platform-presets" value="Other overseas platform">
+              </div>
+
+              <div id="batch-panel" class="tab-panel" role="tabpanel" hidden>
+                <div class="field">
+                  <label for="batch-file">批量客服会话文件</label>
+                  <input id="batch-file" name="file" type="file" accept=".txt,.log,.csv,.xlsx,.xlsm">
+                  <p class="helper">支持 txt、log、csv、xlsx、xlsm。文本文件可用单独一行 --- 或 === 分隔多条会话，单次最多 50 条。</p>
+                </div>
+                <p id="batch-error" class="form-message" role="alert" aria-live="polite"></p>
+                <button class="primary-action" type="submit" data-loading-label="批量分析中...">上传并批量分析</button>
+              </div>
+            </form>
+          </div>
+
+          <section class="result-stack">
+            <section id="analysis-result" class="panel result-panel" aria-live="polite">
+              <div class="result-empty">
+                <p class="eyebrow">等待分析</p>
+                <h2>结果会显示在这里</h2>
+                <p>提交会话后，系统会拆出客户问题、业务原因、责任方、下一步建议和需要补充的信息。</p>
+              </div>
+            </section>
+            <section id="batch-results" class="panel batch-results" aria-label="批量分析结果" aria-live="polite"></section>
+          </section>
+        </section>
+
+        <section id="records-summary" class="summary-dashboard panel" aria-live="polite">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">运营概览</p>
+              <h2>分析记录分布</h2>
+            </div>
+            <label class="summary-range" for="summary-range">
+              <span>时间范围</span>
+              <select id="summary-range" name="range">
+                <option value="all">全部记录</option>
+                <option value="7d">最近 7 天</option>
+                <option value="30d">最近 30 天</option>
+              </select>
+            </label>
+          </div>
+          <div id="summary-content" class="summary-loading">概览加载中...</div>
+        </section>
+
+        <section class="history" aria-label="最近分析记录">
+          <div class="section-heading">
+            <div>
+              <h2>最近记录</h2>
+              <span>{{ records|length }} 条</span>
+            </div>
+            <a class="secondary-action" href="/api/records/export.csv">导出 CSV</a>
+          </div>
+          <form id="record-filter" class="record-filter" role="search" aria-label="筛选最近记录">
+            <label class="filter-field" for="record-search">
+              <span>关键词</span>
+              <input id="record-search" name="search" type="search" placeholder="搜索平台、报告或记录 ID">
+            </label>
+            <label class="filter-field" for="platform-filter">
+              <span>平台</span>
+              <input id="platform-filter" name="platform" list="platform-presets" placeholder="全部平台">
+            </label>
+            <label class="filter-field" for="issue-filter">
+              <span>问题类型</span>
+              <select id="issue-filter" name="issue_category">
+                <option value="">全部问题类型</option>
+                <option value="installation">安装、开箱或组装问题</option>
+                <option value="function_use">功能不会用或设置失败</option>
+                <option value="expectation_gap">功能表现未达到预期</option>
+                <option value="product_fault">产品异常或质量问题</option>
+                <option value="compatibility">兼容性问题</option>
+                <option value="accessory">配件或使用条件问题</option>
+                <option value="non_usage">非产品使用问题</option>
+                <option value="unclear">信息不足</option>
+              </select>
+            </label>
+            <label class="filter-field" for="responsibility-filter">
+              <span>责任方</span>
+              <select id="responsibility-filter" name="responsibility">
+                <option value="">全部责任方</option>
+                <option value="operations">运营</option>
+                <option value="customer_service_training">客服培训</option>
+                <option value="product">产品</option>
+                <option value="supply_chain_quality">供应链或质量</option>
+                <option value="need_more_information">需要补充信息</option>
+              </select>
+            </label>
+            <label class="filter-field" for="feedback-filter">
+              <span>复核状态</span>
+              <select id="feedback-filter" name="feedback_status">
+                <option value="">全部复核状态</option>
+                <option value="unreviewed">未复核</option>
+                <option value="accepted">已认可</option>
+                <option value="corrected">已修正</option>
+              </select>
+            </label>
+            <button class="secondary-action review-queue-toggle" type="button" data-review-queue-toggle aria-pressed="false">只看待复核（0）</button>
+            <button class="secondary-action" type="button" data-filter-export>导出筛选 CSV</button>
+            <button class="secondary-action" type="button" data-filter-reset>清空</button>
+            <p id="export-filter-summary" class="export-filter-summary" aria-live="polite">将导出全部记录</p>
+            <p id="export-count-preview" class="export-count-preview" aria-live="polite">预计导出数量加载中...</p>
+            <p id="filter-count" class="filter-count" aria-live="polite">当前显示 {{ records|length }} / {{ records|length }} 条</p>
+          </form>
+          <p id="filter-empty" class="filter-empty" hidden>没有符合条件的记录。</p>
+          <div id="recent-records" class="record-list">
+            {% if records %}
+              {% for record in records|reverse %}
+                <article
+                  class="record"
+                  data-record-id="{{ record.id }}"
+                  data-platform="{{ record.analysis.request.platform }}"
+                  data-issue-category="{{ record.analysis.attribution.issue_category }}"
+                  data-responsibility="{{ record.analysis.attribution.primary_responsibility }}"
+                  data-feedback-status="{{ 'accepted' if record.feedback and record.feedback.accepted else 'corrected' if record.feedback else 'unreviewed' }}"
+                  data-search-text="{{ record.id }} {{ record.analysis.request.platform }} {{ record.analysis.report }} {{ record.feedback.note if record.feedback and record.feedback.note else '' }}"
+                >
+                  <div class="record-meta">
+                    <strong>{{ record.analysis.request.platform }}</strong>
+                    <span>{{ record.analysis.attribution.issue_category }}</span>
+                    <span>{{ record.analysis.attribution.primary_responsibility }}</span>
+                    <span>{{ record.analysis.attribution.evidence_strength }}</span>
+                    {% if record.feedback %}
+                      <span class="feedback-pill">{{ "已认可" if record.feedback.accepted else "已修正" }}</span>
+                    {% endif %}
+                  </div>
+                  <p>{{ record.analysis.report }}</p>
+                  <button
+                    class="record-detail-toggle secondary-action"
+                    type="button"
+                    data-record-detail-toggle
+                    aria-expanded="false"
+                    aria-controls="record-detail-{{ record.id }}"
+                  >查看详情</button>
+                  <div id="record-detail-{{ record.id }}" class="record-detail" hidden>
+                    <button class="record-copy-action secondary-action" type="button" data-record-copy>复制详情</button>
+                    <p class="record-copy-status" data-record-copy-status aria-live="polite"></p>
+                    <dl class="record-detail-grid">
+                      <div>
+                        <dt>客户问题</dt>
+                        <dd>{{ record.analysis.attribution.customer_problem or "暂无信息" }}</dd>
+                      </div>
+                      <div>
+                        <dt>问题类型</dt>
+                        <dd>{{ record.analysis.attribution.issue_category or "暂无信息" }}</dd>
+                      </div>
+                      <div>
+                        <dt>业务原因</dt>
+                        <dd>{{ record.analysis.attribution.root_causes|join("；") if record.analysis.attribution.root_causes else "暂无信息" }}</dd>
+                      </div>
+                      <div>
+                        <dt>优先责任方</dt>
+                        <dd>{{ record.analysis.attribution.primary_responsibility or "暂无信息" }}</dd>
+                      </div>
+                      <div>
+                        <dt>证据强度</dt>
+                        <dd>{{ record.analysis.attribution.evidence_strength or "暂无信息" }}</dd>
+                      </div>
+                      <div>
+                        <dt>下一步建议</dt>
+                        <dd>{{ record.analysis.attribution.recommended_actions|join("；") if record.analysis.attribution.recommended_actions else "暂无信息" }}</dd>
+                      </div>
+                      <div>
+                        <dt>需要补充信息</dt>
+                        <dd>{{ record.analysis.attribution.missing_information|join("；") if record.analysis.attribution.missing_information else "暂无信息" }}</dd>
+                      </div>
+                      <div>
+                        <dt>人工复核</dt>
+                        <dd>{{ "已认可" if record.feedback and record.feedback.accepted else "已修正" if record.feedback else "未复核" }}</dd>
+                      </div>
+                      <div>
+                        <dt>人工备注</dt>
+                        <dd>{{ record.feedback.note if record.feedback and record.feedback.note else "暂无信息" }}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                </article>
+              {% endfor %}
+            {% else %}
+              <p class="empty">还没有分析记录。</p>
+            {% endif %}
+          </div>
+        </section>
+      </section>
+    </main>
+    <datalist id="platform-presets">
+      <option value="Amazon"></option>
+      <option value="TikTok Shop"></option>
+      <option value="Shopee"></option>
+      <option value="Walmart Marketplace"></option>
+      <option value="eBay"></option>
+      <option value="Shopify"></option>
+      <option value="AliExpress"></option>
+      <option value="Lazada"></option>
+      <option value="Temu"></option>
+      <option value="Shein"></option>
+      <option value="Other overseas platform"></option>
+    </datalist>
+    <template data-feedback-template>
+      <form class="feedback-form">
+        <label>
+          复核结论
+          <select name="accepted">
+            <option value="true">认可系统判断</option>
+            <option value="false">需要修正</option>
+          </select>
+        </label>
+        <label>
+          修正问题类型
+          <input name="corrected_issue_category" placeholder="例如 product_fault">
+        </label>
+        <label>
+          修正责任方
+          <input name="corrected_responsibility" placeholder="例如 supply_chain_quality">
+        </label>
+        <label>
+          备注
+          <textarea name="note" rows="3" placeholder="记录人工判断依据"></textarea>
+        </label>
+        <button class="primary-action" type="submit" data-loading-label="保存中...">保存反馈</button>
+        <p class="form-message" role="alert" aria-live="polite"></p>
+      </form>
+    </template>
+  </body>
+</html>

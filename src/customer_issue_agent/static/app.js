@@ -1,0 +1,927 @@
+const labels = {
+  issue_category: {
+    installation: "安装、开箱或组装问题",
+    function_use: "功能不会用或设置失败",
+    expectation_gap: "功能表现未达到预期",
+    product_fault: "产品异常、失灵或疑似质量问题",
+    compatibility: "兼容性问题",
+    accessory: "配件缺失或条件不满足",
+    non_usage: "非产品使用问题",
+    unclear: "信息不足",
+  },
+  responsibility: {
+    operations: "运营",
+    customer_service_training: "客服培训",
+    product: "产品",
+    supply_chain_quality: "供应链或质量",
+    need_more_information: "需要补充信息",
+  },
+  evidence: {
+    clear: "较明确",
+    likely: "倾向于",
+    insufficient: "信息不足",
+  },
+  feedback: {
+    unreviewed: "未复核",
+    accepted: "已认可",
+    corrected: "已修正",
+  },
+};
+
+let latestExportCountRequestId = 0;
+
+document.addEventListener("DOMContentLoaded", () => {
+  bindTabs();
+  bindAnalysisForm("paste-form", "paste-error");
+  bindAnalysisForm("upload-form", "upload-error");
+  bindBatchForm();
+  bindFeedbackForms(document);
+  bindSummaryRange();
+  loadRecordsSummary();
+  bindFilteredExport();
+  bindRecordFilters();
+  bindReviewQueueToggle();
+  bindRecordDetails(document);
+  bindRecordCopyActions(document);
+});
+
+function bindTabs() {
+  const tabs = Array.from(document.querySelectorAll("[data-tab-target]"));
+  const forms = {
+    "paste-panel": document.getElementById("paste-form"),
+    "upload-panel": document.getElementById("upload-form"),
+    "batch-panel": document.getElementById("batch-form"),
+  };
+
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const target = tab.dataset.tabTarget;
+      tabs.forEach((item) => {
+        const selected = item === tab;
+        item.classList.toggle("is-active", selected);
+        item.setAttribute("aria-selected", String(selected));
+      });
+
+      Object.entries(forms).forEach(([panelId, form]) => {
+        const panel = document.getElementById(panelId);
+        const active = panelId === target;
+        if (!form || !panel) {
+          return;
+        }
+        form.classList.toggle("is-hidden", !active);
+        panel.hidden = !active;
+      });
+    });
+  });
+}
+
+function bindAnalysisForm(formId, errorId) {
+  const form = document.getElementById(formId);
+  if (!form) {
+    return;
+  }
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    submitAnalysisForm(form, document.getElementById(errorId));
+  });
+}
+
+function bindBatchForm() {
+  const form = document.getElementById("batch-form");
+  if (!form) {
+    return;
+  }
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    submitBatchForm(form, document.getElementById("batch-error"));
+  });
+}
+
+async function submitAnalysisForm(form, errorBox) {
+  const button = form.querySelector("button[type='submit']");
+  const originalLabel = button.textContent;
+  clearError(errorBox);
+  setLoading(button, true);
+
+  try {
+    const response = await fetch(form.dataset.endpoint, {
+      method: "POST",
+      body: new FormData(form),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(readError(payload));
+    }
+    renderAnalysisResult(payload);
+    bindFeedbackForms(document.getElementById("analysis-result"));
+    prependRecentRecord(payload);
+    form.reset();
+  } catch (error) {
+    showError(errorBox, error.message || "分析失败，请检查输入后重试。");
+  } finally {
+    button.textContent = originalLabel;
+    setLoading(button, false);
+  }
+}
+
+function renderAnalysisResult(payload) {
+  const result = document.getElementById("analysis-result");
+  const analysis = payload.analysis;
+  const attribution = analysis.attribution;
+  result.innerHTML = `
+    <div class="result-header">
+      <div>
+        <p class="eyebrow">分析完成</p>
+        <h2>${escapeHtml(analysis.request.platform)}</h2>
+      </div>
+      <span class="record-id">#${escapeHtml(payload.record_id.slice(0, 8))}</span>
+    </div>
+    <div class="summary-strip">
+      <span>${labelFor("issue_category", attribution.issue_category)}</span>
+      <span>${labelFor("responsibility", attribution.primary_responsibility)}</span>
+      <span>${labelFor("evidence", attribution.evidence_strength)}</span>
+    </div>
+    <div class="result-grid">
+      ${resultCard("客户问题", attribution.customer_problem)}
+      ${resultCard("业务原因", attribution.root_causes.map((item) => labelFor("rootCause", item)).join(" + ") || analysis.report)}
+      ${resultCard("优先责任方", labelFor("responsibility", attribution.primary_responsibility))}
+      ${resultCard("下一步建议", attribution.recommended_actions.join("；"))}
+      ${resultCard("需要补充", attribution.missing_information.join("；") || "暂无必须补充的信息。")}
+    </div>
+  `;
+  result.appendChild(createFeedbackForm(payload.record_id));
+}
+
+async function submitBatchForm(form, errorBox) {
+  const button = form.querySelector("button[type='submit']");
+  const originalLabel = button.textContent;
+  clearError(errorBox);
+  setLoading(button, true);
+
+  try {
+    const response = await fetch(form.dataset.endpoint, {
+      method: "POST",
+      body: new FormData(form),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(readError(payload));
+    }
+    renderBatchResults(payload);
+    payload.records.forEach((record) => prependRecentRecord(record));
+    form.reset();
+  } catch (error) {
+    showError(errorBox, error.message || "批量分析失败，请检查文件后重试。");
+  } finally {
+    button.textContent = originalLabel;
+    setLoading(button, false);
+  }
+}
+
+function renderBatchResults(payload) {
+  const container = document.getElementById("batch-results");
+  container.innerHTML = `
+    <div class="result-header">
+      <div>
+        <p class="eyebrow">批量分析完成</p>
+        <h2>${payload.count} 条会话已生成分析</h2>
+      </div>
+      <span class="record-id">批次 #${escapeHtml(payload.batch_id.slice(0, 8))}</span>
+    </div>
+    ${batchSummaryHtml(payload)}
+    <div class="batch-list"></div>
+  `;
+  const list = container.querySelector(".batch-list");
+  payload.records.forEach((record) => {
+    list.appendChild(buildRecordCard(record));
+  });
+  bindFeedbackForms(container);
+}
+
+function batchSummaryHtml(payload) {
+  const summary = buildBatchSummary(payload.records || []);
+  return `
+    <section class="batch-summary" aria-label="本批次摘要">
+      <div class="batch-summary-header">
+        <p class="eyebrow">本批次摘要</p>
+        <h3>先看整体，再逐条复核</h3>
+      </div>
+      <div class="summary-metrics batch-summary-metrics">
+        ${summaryMetric("本批次记录", payload.count ?? summary.total_records)}
+        ${summaryMetric("待复核", summary.unreviewed_records)}
+      </div>
+      <div class="summary-grid batch-summary-grid">
+        ${batchSummaryDistribution("问题类型", "issue_category", summary.issue_categories)}
+        ${batchSummaryDistribution("责任方", "responsibility", summary.responsibilities)}
+        ${batchSummaryDistribution("证据强度", "evidence", summary.evidence_strengths)}
+      </div>
+    </section>
+  `;
+}
+
+function buildBatchSummary(records) {
+  const issueCategories = {};
+  const responsibilities = {};
+  const evidenceStrengths = {};
+
+  records.forEach((record) => {
+    const attribution = record.analysis?.attribution || {};
+    incrementBatchCounter(issueCategories, attribution.issue_category);
+    incrementBatchCounter(responsibilities, attribution.primary_responsibility);
+    incrementBatchCounter(evidenceStrengths, attribution.evidence_strength);
+  });
+
+  return {
+    total_records: records.length,
+    unreviewed_records: records.length,
+    issue_categories: rankBatchSummary(issueCategories),
+    responsibilities: rankBatchSummary(responsibilities),
+    evidence_strengths: rankBatchSummary(evidenceStrengths),
+  };
+}
+
+function incrementBatchCounter(counter, value) {
+  const key = String(value || "unknown").trim() || "unknown";
+  counter[key] = (counter[key] || 0) + 1;
+}
+
+function rankBatchSummary(counter) {
+  return Object.entries(counter)
+    .map(([value, count]) => ({ value, count }))
+    .sort((left, right) => right.count - left.count || left.value.localeCompare(right.value));
+}
+
+function batchSummaryDistribution(title, labelGroup, items = []) {
+  const rows = items.length
+    ? items.map((item) => `
+        <li>
+          <span>${escapeHtml(labelFor(labelGroup, item.value))}</span>
+          <strong>${escapeHtml(item.count)}</strong>
+        </li>
+      `).join("")
+    : `<li><span>暂无数据</span><strong>0</strong></li>`;
+
+  return `
+    <article class="summary-card distribution-card batch-summary-card">
+      <h4>${escapeHtml(title)}</h4>
+      <ul class="distribution-list">${rows}</ul>
+    </article>
+  `;
+}
+
+function buildRecordCard(payload) {
+  const analysis = payload.analysis;
+  const attribution = analysis.attribution;
+  const article = document.createElement("article");
+  article.className = "record result-record";
+  article.dataset.recordId = payload.record_id;
+  article.innerHTML = `
+    <div class="record-meta">
+      <strong>${escapeHtml(analysis.request.platform)}</strong>
+      <span>${labelFor("issue_category", attribution.issue_category)}</span>
+      <span>${labelFor("responsibility", attribution.primary_responsibility)}</span>
+      <span>${labelFor("evidence", attribution.evidence_strength)}</span>
+    </div>
+    <p>${escapeHtml(analysis.report)}</p>
+  `;
+  article.appendChild(createFeedbackForm(payload.record_id));
+  return article;
+}
+
+function createFeedbackForm(recordId) {
+  const template = document.querySelector("[data-feedback-template]");
+  const fragment = template.content.cloneNode(true);
+  const form = fragment.querySelector("form");
+  form.dataset.endpoint = `/api/records/${recordId}/feedback`;
+  return fragment;
+}
+
+function bindFeedbackForms(root) {
+  root.querySelectorAll(".feedback-form").forEach((form) => {
+    if (form.dataset.bound === "true") {
+      return;
+    }
+    form.dataset.bound = "true";
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      submitFeedbackForm(form);
+    });
+  });
+}
+
+async function submitFeedbackForm(form) {
+  const button = form.querySelector("button[type='submit']");
+  const message = form.querySelector(".form-message");
+  const originalLabel = button.textContent;
+  clearError(message);
+  setLoading(button, true);
+
+  try {
+    const response = await fetch(form.dataset.endpoint, {
+      method: "POST",
+      body: new FormData(form),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(readError(payload));
+    }
+    message.textContent = payload.feedback.accepted ? "已保存：认可系统判断。" : "已保存：人工修正已记录。";
+    message.classList.add("is-visible", "is-success");
+  } catch (error) {
+    showError(message, error.message || "反馈保存失败，请稍后重试。");
+  } finally {
+    button.textContent = originalLabel;
+    setLoading(button, false);
+  }
+}
+
+function prependRecentRecord(payload) {
+  const list = document.getElementById("recent-records");
+  const analysis = payload.analysis;
+  const attribution = analysis.attribution;
+  const empty = list.querySelector(".empty");
+  if (empty) {
+    empty.remove();
+  }
+
+  const article = document.createElement("article");
+  article.className = "record";
+  article.dataset.recordId = payload.record_id;
+  article.dataset.platform = analysis.request.platform;
+  article.dataset.issueCategory = attribution.issue_category;
+  article.dataset.responsibility = attribution.primary_responsibility;
+  article.dataset.feedbackStatus = "unreviewed";
+  article.dataset.searchText = `${payload.record_id} ${analysis.request.platform} ${analysis.report}`;
+  article.innerHTML = `
+    <div class="record-meta">
+      <strong>${escapeHtml(analysis.request.platform)}</strong>
+      <span>${labelFor("issue_category", attribution.issue_category)}</span>
+      <span>${labelFor("responsibility", attribution.primary_responsibility)}</span>
+      <span>${labelFor("evidence", attribution.evidence_strength)}</span>
+    </div>
+    <p>${escapeHtml(analysis.report)}</p>
+    ${recordDetailHtml(payload.record_id, analysis)}
+  `;
+  list.prepend(article);
+  bindRecordDetails(article);
+  bindRecordCopyActions(article);
+  refreshRecordFilterViews();
+}
+
+function resultCard(title, body) {
+  return `
+    <article class="result-card">
+      <h3>${escapeHtml(title)}</h3>
+      <p>${escapeHtml(body || "暂无信息。")}</p>
+    </article>
+  `;
+}
+
+function labelFor(group, value) {
+  if (group === "rootCause") {
+    return rootCauseLabel(value);
+  }
+  return labels[group]?.[value] || value || "未知";
+}
+
+function rootCauseLabel(value) {
+  const rootCauses = {
+    unclear_instructions: "说明或引导不清",
+    expectation_mismatch: "预期与实际体验有落差",
+    customer_service_gap: "客服排障引导不足",
+    product_design: "产品设计容易误用",
+    quality_signal: "疑似产品质量异常",
+    compatibility_limit: "疑似兼容性限制",
+    customer_operation: "客户操作或条件不足",
+    insufficient_information: "信息不足",
+    non_usage_issue: "非产品使用问题",
+  };
+  return rootCauses[value] || value || "未知";
+}
+
+function bindSummaryRange() {
+  const select = document.getElementById("summary-range");
+  if (!select) {
+    return;
+  }
+
+  select.addEventListener("change", () => {
+    loadRecordsSummary();
+    refreshRecordFilterViews();
+  });
+}
+
+async function loadRecordsSummary() {
+  const container = document.getElementById("summary-content");
+  if (!container) {
+    return;
+  }
+
+  const range = document.getElementById("summary-range")?.value || "all";
+  const params = new URLSearchParams();
+  params.set("range", range);
+
+  try {
+    const response = await fetch(`/api/records/summary?${params.toString()}`);
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(readError(payload));
+    }
+    renderRecordsSummary(payload);
+  } catch (error) {
+    container.innerHTML = `<p class="summary-error">${escapeHtml(error.message || "概览加载失败，请刷新页面重试。")}</p>`;
+  }
+}
+
+function renderRecordsSummary(summary) {
+  const container = document.getElementById("summary-content");
+  if (!container) {
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="summary-metrics">
+      ${summaryMetric("总记录数", summary.total_records)}
+      ${summaryMetric("已复核", summary.reviewed_records)}
+      ${summaryMetric("已修正", summary.corrected_records)}
+    </div>
+    <div class="summary-grid">
+      ${summaryDistribution("平台分布", "platform", summary.platforms)}
+      ${summaryDistribution("问题类型", "issue_category", summary.issue_categories)}
+      ${summaryDistribution("责任方", "responsibility", summary.responsibilities)}
+      ${summaryDistribution("证据强度", "evidence", summary.evidence_strengths)}
+      ${summaryDistribution("复核状态", "feedback", summary.feedback_statuses)}
+    </div>
+  `;
+  bindSummaryPlatformFilters(container);
+}
+
+function summaryMetric(label, value) {
+  return `
+    <article class="summary-card">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </article>
+  `;
+}
+
+function summaryDistribution(title, labelGroup, items = []) {
+  const rows = items.length
+    ? items.map((item) => `
+        <li>
+          ${summaryDistributionLabel(labelGroup, item.value)}
+          <strong>${escapeHtml(item.count)}</strong>
+        </li>
+      `).join("")
+    : `<li><span>暂无数据</span><strong>0</strong></li>`;
+
+  return `
+    <article class="summary-card distribution-card">
+      <h3>${escapeHtml(title)}</h3>
+      <ul class="distribution-list">${rows}</ul>
+    </article>
+  `;
+}
+
+function summaryDistributionLabel(labelGroup, value) {
+  const label = labelFor(labelGroup, value);
+  if (labelGroup !== "platform") {
+    return `<span>${escapeHtml(label)}</span>`;
+  }
+  return `
+    <button
+      class="summary-filter-link"
+      type="button"
+      data-summary-platform-filter="${escapeHtml(value)}"
+    >${escapeHtml(label)}</button>
+  `;
+}
+
+function bindSummaryPlatformFilters(root = document) {
+  root.querySelectorAll("[data-summary-platform-filter]").forEach((button) => {
+    if (button.dataset.bound === "true") {
+      return;
+    }
+    button.dataset.bound = "true";
+    button.addEventListener("click", () => {
+      applySummaryPlatformFilter(button.dataset.summaryPlatformFilter || "");
+    });
+  });
+}
+
+function applySummaryPlatformFilter(platform) {
+  const value = platform.trim();
+  const input = document.getElementById("platform-filter");
+  if (!value || !input) {
+    return;
+  }
+
+  input.value = value;
+  refreshRecordFilterViews();
+
+  const recentRecords = document.getElementById("recent-records");
+  const target = recentRecords?.closest("section") || recentRecords;
+  if (target) {
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
+
+function bindFilteredExport() {
+  const button = document.querySelector("[data-filter-export]");
+  if (!button) {
+    return;
+  }
+
+  button.addEventListener("click", () => {
+    window.location.href = buildFilteredExportUrl();
+  });
+}
+
+function buildExportFilterParams() {
+  const params = new URLSearchParams();
+  const summaryRange = document.getElementById("summary-range")?.value || "all";
+  const query = document.getElementById("record-search")?.value.trim() || "";
+  const platform = document.getElementById("platform-filter")?.value.trim() || "";
+  const issue = document.getElementById("issue-filter")?.value || "";
+  const responsibility = document.getElementById("responsibility-filter")?.value || "";
+  const feedback = document.getElementById("feedback-filter")?.value || "";
+
+  if (summaryRange !== "all") {
+    params.set("range", summaryRange);
+  }
+  if (query) {
+    params.set("q", query);
+  }
+  if (platform) {
+    params.set("platform", platform);
+  }
+  if (issue) {
+    params.set("issue_category", issue);
+  }
+  if (responsibility) {
+    params.set("responsibility", responsibility);
+  }
+  if (feedback) {
+    params.set("feedback_status", feedback);
+  }
+  return params;
+}
+
+function buildFilteredExportUrl() {
+  const params = buildExportFilterParams();
+  const queryString = params.toString();
+  return queryString ? `/api/records/export.csv?${queryString}` : "/api/records/export.csv";
+}
+
+function buildExportCountPreviewUrl() {
+  const params = buildExportFilterParams();
+  const queryString = params.toString();
+  return queryString ? `/api/records/export-count?${queryString}` : "/api/records/export-count";
+}
+
+function exportRangeLabel(value) {
+  const rangeLabels = {
+    all: "全部记录",
+    "7d": "最近 7 天",
+    "30d": "最近 30 天",
+  };
+  return rangeLabels[value] || rangeLabels.all;
+}
+
+function updateExportFilterSummary() {
+  const summary = document.getElementById("export-filter-summary");
+  if (!summary) {
+    return;
+  }
+
+  const query = document.getElementById("record-search")?.value.trim() || "";
+  const platform = document.getElementById("platform-filter")?.value.trim() || "";
+  const issue = document.getElementById("issue-filter")?.value || "";
+  const responsibility = document.getElementById("responsibility-filter")?.value || "";
+  const feedback = document.getElementById("feedback-filter")?.value || "";
+  const range = document.getElementById("summary-range")?.value || "all";
+  const conditions = [];
+
+  if (platform) {
+    conditions.push(`平台：${platform}`);
+  }
+  if (query) {
+    conditions.push(`关键词：${query}`);
+  }
+  if (issue) {
+    conditions.push(`问题类型：${labelFor("issue_category", issue)}`);
+  }
+  if (responsibility) {
+    conditions.push(`责任方：${labelFor("responsibility", responsibility)}`);
+  }
+  if (feedback) {
+    conditions.push(`复核状态：${labelFor("feedback", feedback)}`);
+  }
+  if (range !== "all") {
+    conditions.push(`时间：${exportRangeLabel(range)}`);
+  }
+
+  summary.textContent = conditions.length
+    ? `筛选导出将应用：${conditions.join("；")}`
+    : "将导出全部记录";
+}
+
+async function updateExportCountPreview() {
+  const preview = document.getElementById("export-count-preview");
+  if (!preview) {
+    return;
+  }
+
+  const requestId = latestExportCountRequestId + 1;
+  latestExportCountRequestId = requestId;
+  preview.textContent = "预计导出数量加载中...";
+
+  try {
+    const response = await fetch(buildExportCountPreviewUrl());
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(readError(payload));
+    }
+    if (requestId !== latestExportCountRequestId) {
+      return;
+    }
+    preview.textContent = `预计导出 ${payload.count} 条`;
+  } catch (error) {
+    if (requestId === latestExportCountRequestId) {
+      preview.textContent = "预计数量暂不可用";
+    }
+  }
+}
+
+function refreshRecordFilterViews() {
+  applyRecordFilters();
+  updateExportFilterSummary();
+  updateExportCountPreview();
+  updateReviewQueueToggle();
+}
+
+function bindReviewQueueToggle() {
+  const button = document.querySelector("[data-review-queue-toggle]");
+  if (!button) {
+    return;
+  }
+
+  button.addEventListener("click", () => toggleReviewQueueFilter());
+  updateReviewQueueToggle();
+}
+
+function toggleReviewQueueFilter() {
+  const feedbackFilter = document.getElementById("feedback-filter");
+  if (!feedbackFilter) {
+    return;
+  }
+
+  if (feedbackFilter.value === "unreviewed") {
+    feedbackFilter.value = "";
+  } else {
+    feedbackFilter.value = "unreviewed";
+  }
+  refreshRecordFilterViews();
+}
+
+function updateReviewQueueToggle() {
+  const button = document.querySelector("[data-review-queue-toggle]");
+  if (!button) {
+    return;
+  }
+
+  const feedbackFilter = document.getElementById("feedback-filter");
+  const pendingCount = document.querySelectorAll('#recent-records .record[data-feedback-status="unreviewed"]').length;
+  const active = feedbackFilter?.value === "unreviewed";
+  button.textContent = `只看待复核（${pendingCount}）`;
+  button.classList.toggle("is-active", active);
+  button.setAttribute("aria-pressed", String(active));
+}
+
+function bindRecordDetails(root = document) {
+  root.querySelectorAll("[data-record-detail-toggle]").forEach((button) => {
+    if (button.dataset.bound === "true") {
+      return;
+    }
+    button.dataset.bound = "true";
+    button.addEventListener("click", () => toggleRecordDetail(button));
+  });
+}
+
+function toggleRecordDetail(button) {
+  const detailId = button.getAttribute("aria-controls");
+  const detail = detailId ? document.getElementById(detailId) : null;
+  if (!detail) {
+    return;
+  }
+
+  const expanded = button.getAttribute("aria-expanded") === "true";
+  button.setAttribute("aria-expanded", String(!expanded));
+  button.textContent = expanded ? "查看详情" : "收起详情";
+  detail.hidden = expanded;
+}
+
+function bindRecordCopyActions(root = document) {
+  root.querySelectorAll("[data-record-copy]").forEach((button) => {
+    if (button.dataset.bound === "true") {
+      return;
+    }
+    button.dataset.bound = "true";
+    button.addEventListener("click", () => copyRecordDetails(button));
+  });
+}
+
+async function copyRecordDetails(button) {
+  const record = button.closest(".record");
+  const status = record?.querySelector("[data-record-copy-status]") || null;
+  const text = record ? buildRecordDetailCopyText(record) : "";
+  if (!text || !navigator.clipboard || !navigator.clipboard.writeText) {
+    setRecordCopyStatus(status, "复制失败，请手动选择详情文本", false);
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(text);
+    setRecordCopyStatus(status, "已复制详情", true);
+  } catch (error) {
+    setRecordCopyStatus(status, "复制失败，请手动选择详情文本", false);
+  }
+}
+
+function buildRecordDetailCopyText(record) {
+  const lines = [
+    `平台：${record.dataset.platform || "暂无信息"}`,
+    `记录 ID：${record.dataset.recordId || "暂无信息"}`,
+  ];
+  record.querySelectorAll(".record-detail-grid div").forEach((row) => {
+    const label = row.querySelector("dt")?.textContent.trim();
+    const value = row.querySelector("dd")?.textContent.trim() || "暂无信息";
+    if (label) {
+      lines.push(`${label}：${value}`);
+    }
+  });
+  return lines.join("\n");
+}
+
+function setRecordCopyStatus(status, message, success) {
+  if (!status) {
+    return;
+  }
+  status.textContent = message;
+  status.classList.toggle("is-success", success);
+  status.classList.toggle("is-error", !success);
+}
+
+function recordDetailHtml(recordId, analysis, feedback = null) {
+  const attribution = analysis.attribution;
+  const feedbackStatus = feedback ? (feedback.accepted ? "已认可" : "已修正") : "未复核";
+  const feedbackNote = feedback?.note || "暂无信息";
+  const detailId = `record-detail-${recordId}`;
+
+  return `
+    <button
+      class="record-detail-toggle secondary-action"
+      type="button"
+      data-record-detail-toggle
+      aria-expanded="false"
+      aria-controls="${escapeHtml(detailId)}"
+    >查看详情</button>
+    <div id="${escapeHtml(detailId)}" class="record-detail" hidden>
+      <button class="record-copy-action secondary-action" type="button" data-record-copy>复制详情</button>
+      <p class="record-copy-status" data-record-copy-status aria-live="polite"></p>
+      <dl class="record-detail-grid">
+        ${recordDetailRow("客户问题", attribution.customer_problem)}
+        ${recordDetailRow("问题类型", labelFor("issue_category", attribution.issue_category))}
+        ${recordDetailRow("业务原因", listText((attribution.root_causes || []).map((item) => labelFor("rootCause", item))))}
+        ${recordDetailRow("优先责任方", labelFor("responsibility", attribution.primary_responsibility))}
+        ${recordDetailRow("证据强度", labelFor("evidence", attribution.evidence_strength))}
+        ${recordDetailRow("下一步建议", listText(attribution.recommended_actions))}
+        ${recordDetailRow("需要补充信息", listText(attribution.missing_information))}
+        ${recordDetailRow("人工复核", feedbackStatus)}
+        ${recordDetailRow("人工备注", feedbackNote)}
+      </dl>
+    </div>
+  `;
+}
+
+function recordDetailRow(label, value) {
+  return `
+    <div>
+      <dt>${escapeHtml(label)}</dt>
+      <dd>${escapeHtml(value || "暂无信息")}</dd>
+    </div>
+  `;
+}
+
+function listText(value) {
+  if (!Array.isArray(value)) {
+    return value || "暂无信息";
+  }
+  return value.filter(Boolean).join("；") || "暂无信息";
+}
+
+function bindRecordFilters() {
+  const form = document.getElementById("record-filter");
+  if (!form) {
+    return;
+  }
+
+  form.addEventListener("input", () => {
+    refreshRecordFilterViews();
+  });
+  form.addEventListener("change", () => {
+    refreshRecordFilterViews();
+  });
+
+  const reset = form.querySelector("[data-filter-reset]");
+  if (reset) {
+    reset.addEventListener("click", () => resetRecordFilters(form));
+  }
+
+  refreshRecordFilterViews();
+}
+
+function applyRecordFilters() {
+  const records = Array.from(document.querySelectorAll("#recent-records .record"));
+  const query = document.getElementById("record-search")?.value.trim().toLowerCase() || "";
+  const platform = document.getElementById("platform-filter")?.value.trim().toLowerCase() || "";
+  const issue = document.getElementById("issue-filter")?.value || "";
+  const responsibility = document.getElementById("responsibility-filter")?.value || "";
+  const feedback = document.getElementById("feedback-filter")?.value || "";
+  let visible = 0;
+
+  records.forEach((record) => {
+    const matches = recordMatchesFilters(record, { query, platform, issue, responsibility, feedback });
+    record.hidden = !matches;
+    if (matches) {
+      visible += 1;
+    }
+  });
+
+  updateFilterState(visible, records.length);
+}
+
+function resetRecordFilters(form) {
+  form.reset();
+  refreshRecordFilterViews();
+}
+
+function recordMatchesFilters(record, filters) {
+  const searchText = (record.dataset.searchText || "").toLowerCase();
+  const platform = (record.dataset.platform || "").toLowerCase();
+  const matchesQuery = !filters.query || searchText.includes(filters.query);
+  const matchesPlatform = !filters.platform || platform.includes(filters.platform);
+  const matchesIssue = !filters.issue || record.dataset.issueCategory === filters.issue;
+  const matchesResponsibility = !filters.responsibility || record.dataset.responsibility === filters.responsibility;
+  const matchesFeedback = !filters.feedback || record.dataset.feedbackStatus === filters.feedback;
+  return matchesQuery && matchesPlatform && matchesIssue && matchesResponsibility && matchesFeedback;
+}
+
+function updateFilterState(visible, total) {
+  const count = document.getElementById("filter-count");
+  const empty = document.getElementById("filter-empty");
+  if (count) {
+    count.textContent = `当前显示 ${visible} / ${total} 条`;
+  }
+  if (empty) {
+    empty.hidden = visible > 0 || total === 0;
+  }
+}
+
+function readError(payload) {
+  if (typeof payload.detail === "string") {
+    return payload.detail;
+  }
+  if (Array.isArray(payload.detail) && payload.detail[0]?.msg) {
+    return payload.detail[0].msg;
+  }
+  return "分析失败，请检查输入后重试。";
+}
+
+function showError(errorBox, message) {
+  errorBox.textContent = message;
+  errorBox.classList.add("is-visible");
+}
+
+function clearError(errorBox) {
+  errorBox.textContent = "";
+  errorBox.classList.remove("is-visible");
+}
+
+function setLoading(button, loading) {
+  button.disabled = loading;
+  if (loading) {
+    button.textContent = button.dataset.loadingLabel || "处理中...";
+  }
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
