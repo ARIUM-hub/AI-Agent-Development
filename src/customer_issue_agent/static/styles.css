@@ -389,7 +389,8 @@ textarea:focus-visible {
 
 .filter-field span,
 .filter-count,
-.export-filter-summary {
+.export-filter-summary,
+.export-count-preview {
   color: var(--muted);
   font-size: 13px;
 }
@@ -406,6 +407,13 @@ textarea:focus-visible {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.7);
+}
+
+.export-count-preview {
+  grid-column: 1 / -1;
+  margin: -4px 0 0;
+  color: var(--ink);
+  font-weight: 700;
 }
 
 .filter-empty {

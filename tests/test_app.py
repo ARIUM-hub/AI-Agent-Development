@@ -383,6 +383,7 @@ def test_styles_cover_recent_record_filter_components(tmp_path):
     assert ".filter-count" in css
     assert ".filter-empty" in css
     assert ".export-filter-summary" in css
+    assert ".export-count-preview" in css
 
 
 def test_records_summary_endpoint_returns_counts(tmp_path):
