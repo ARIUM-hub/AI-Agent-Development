@@ -7,6 +7,122 @@ const getJson = async (path) => {
   return response.json();
 };
 
+const historyCards = () => document.getElementById("history-cards");
+
+const historyStatusLabel = (status) => {
+  if (status === "passed") {
+    return "通过";
+  }
+  if (status === "failed") {
+    return "失败";
+  }
+  if (status === "running") {
+    return "运行中";
+  }
+  if (status === "planned") {
+    return "已计划";
+  }
+  return status || "未知状态";
+};
+
+const historyStatusClass = (status) => {
+  if (status === "passed") {
+    return "history-status-passed";
+  }
+  if (status === "failed") {
+    return "history-status-failed";
+  }
+  if (status === "running") {
+    return "history-status-running";
+  }
+  if (status === "planned") {
+    return "history-status-planned";
+  }
+  return "history-status-unknown";
+};
+
+const clearHistoryCards = () => {
+  historyCards().replaceChildren();
+};
+
+const appendHistoryList = (parent, title, items, emptyText) => {
+  const section = document.createElement("section");
+  section.className = "history-detail-section";
+  const heading = document.createElement("h5");
+  heading.textContent = title;
+  section.appendChild(heading);
+
+  const list = document.createElement("ul");
+  list.className = "history-list";
+  const values = Array.isArray(items) ? items : [];
+  if (values.length === 0) {
+    const item = document.createElement("li");
+    item.textContent = emptyText;
+    list.appendChild(item);
+  } else {
+    values.forEach((value) => {
+      const item = document.createElement("li");
+      item.textContent = String(value);
+      list.appendChild(item);
+    });
+  }
+  section.appendChild(list);
+  parent.appendChild(section);
+};
+
+const renderHistoryCards = (payload) => {
+  clearHistoryCards();
+  const tasks = Array.isArray(payload.tasks) ? payload.tasks : [];
+  if (tasks.length === 0) {
+    appendText(historyCards(), "history-empty-state", "暂无历史任务。完成 dry-run 或确认执行后会出现在这里。");
+    return;
+  }
+
+  tasks.forEach((task) => {
+    const statusClass = historyStatusClass(task.status);
+    const events = Array.isArray(task.events) ? task.events : [];
+    const verification = Array.isArray(task.verification) ? task.verification : [];
+    const lessons = Array.isArray(task.lessons) ? task.lessons : [];
+
+    const card = document.createElement("article");
+    card.className = `history-card ${statusClass}`;
+
+    const header = document.createElement("div");
+    header.className = "history-card-header";
+    const title = document.createElement("h3");
+    title.textContent = task.title || "未命名任务";
+    const badge = document.createElement("span");
+    badge.className = `history-status-badge ${statusClass}`;
+    badge.textContent = historyStatusLabel(task.status);
+    header.append(title, badge);
+
+    const summary = document.createElement("p");
+    summary.className = "history-summary";
+    summary.textContent = task.summary || "暂无摘要";
+
+    const latestEvent = events.length > 0 ? events[events.length - 1] : "暂无事件记录";
+    const meta = document.createElement("p");
+    meta.className = "history-meta";
+    meta.textContent = `验证 ${verification.length} 项 · 经验 ${lessons.length} 条 · 最近事件：${latestEvent}`;
+
+    const taskId = document.createElement("p");
+    taskId.className = "history-task-id";
+    taskId.textContent = `任务 ID：${task.task_id || "未知"}`;
+
+    const details = document.createElement("details");
+    details.className = "history-detail";
+    const detailsSummary = document.createElement("summary");
+    detailsSummary.textContent = "查看详情";
+    details.appendChild(detailsSummary);
+    appendHistoryList(details, "验证命令", verification, "暂无验证命令");
+    appendHistoryList(details, "经验", lessons, "暂无经验");
+    appendHistoryList(details, "事件", events, "暂无事件");
+
+    card.append(header, summary, meta, taskId, details);
+    historyCards().appendChild(card);
+  });
+};
+
 async function loadHealth() {
   renderJson("health", await getJson("/api/health"));
 }
@@ -16,7 +132,9 @@ async function loadContext() {
 }
 
 async function loadHistory() {
-  renderJson("history", await getJson("/api/history"));
+  const payload = await getJson("/api/history");
+  renderHistoryCards(payload);
+  renderJson("history", payload);
 }
 
 async function submitRun(event) {

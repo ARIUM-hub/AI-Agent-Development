@@ -158,6 +158,8 @@ def test_static_assets_include_console_interactions(tmp_path) -> None:
     assert index_status == HTTPStatus.OK
     assert index_type == "text/html; charset=utf-8"
     assert "Provider plan 审批" in index_body
+    assert "history-cards" in index_body
+    assert "历史 JSON" in index_body
     assert "provider-plan-form" in index_body
     assert "confirm-provider-apply" in index_body
     assert "provider-preview-cards" in index_body
@@ -182,10 +184,22 @@ def test_static_assets_include_console_interactions(tmp_path) -> None:
     assert ".audit-success" in css_body
     assert ".audit-failed" in css_body
     assert ".audit-diff" in css_body
+    assert ".history-card-list" in css_body
+    assert ".history-card" in css_body
+    assert ".history-status-badge" in css_body
+    assert ".history-status-passed" in css_body
+    assert ".history-status-failed" in css_body
+    assert ".history-detail" in css_body
     assert "overflow-wrap: anywhere" in css_body
     assert js_status == HTTPStatus.OK
     assert js_type == "text/javascript; charset=utf-8"
     assert "loadContext" in js_body
+    assert "historyCards" in js_body
+    assert "renderHistoryCards" in js_body
+    assert "historyStatusLabel" in js_body
+    assert "historyStatusClass" in js_body
+    assert "clearHistoryCards" in js_body
+    assert "appendHistoryList" in js_body
     assert "submitRun" in js_body
     assert "submitProviderPreview" in js_body
     assert "submitProviderApply" in js_body
@@ -207,6 +221,10 @@ def test_static_assets_include_console_interactions(tmp_path) -> None:
     assert "applied_changes" in js_body
     assert "content_preview_truncated" in js_body
     assert "textContent" in js_body
+    load_history_index = js_body.index("async function loadHistory")
+    render_history_index = js_body.index("renderHistoryCards(payload)", load_history_index)
+    render_json_index = js_body.index('renderJson("history", payload)', load_history_index)
+    assert render_history_index < render_json_index
     reset_index = js_body.index("const resetProviderPreview")
     audit_clear_index = js_body.index("clearProviderAuditCards();", reset_index)
     stale_preview_guard_index = js_body.index("if (lastProviderPreview === null)", reset_index)
