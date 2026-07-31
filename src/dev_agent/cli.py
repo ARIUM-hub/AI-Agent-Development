@@ -1,9 +1,16 @@
 from argparse import ArgumentParser, Namespace
+from dataclasses import asdict
 from pathlib import Path
 import json
+import os
 import sys
 
 from dev_agent import __version__
+from dev_agent.config.provider import (
+    ProviderConfigError,
+    load_openai_compatible_config,
+    resolve_openai_compatible_api_key,
+)
 from dev_agent.encoding import UTF8, read_text_utf8, utf8_environment_hint, write_text_utf8
 from dev_agent.execution.applier import ExecutionPlanApplier
 from dev_agent.execution.models import ExecutionPlan, ExecutionResult
@@ -13,7 +20,14 @@ from dev_agent.memory.retriever import MemoryRetriever
 from dev_agent.memory.store import MemoryStore
 from dev_agent.project.scanner import scan_project
 from dev_agent.providers.base import FakeProvider
+from dev_agent.providers.budget import BudgetExceeded
+from dev_agent.providers.models import ProviderError, ProviderUsage
+from dev_agent.providers.openai_compatible import OpenAICompatibleProvider
 from dev_agent.runtime.models import TaskRunOptions
+from dev_agent.runtime.provider_plan import (
+    ProviderPlanPreparation,
+    prepare_provider_execution_plan,
+)
 from dev_agent.runtime.runner import LocalTaskRunner
 from dev_agent.web.server import create_server
 
@@ -135,6 +149,49 @@ def _preview_payload(
         "execution_error": None,
         "file_diffs": preview_result.file_diffs_as_dicts(),
         "preview_fingerprint": preview_result.preview_fingerprint,
+        **_provider_metadata("fake", None, None),
+    }
+
+
+def _provider_metadata(
+    provider: str,
+    model: str | None,
+    usage: ProviderUsage | None,
+) -> dict[str, object]:
+    return {
+        "provider": provider,
+        "model": model,
+        "provider_usage": None if usage is None else asdict(usage),
+    }
+
+
+def _prepared_preview_payload(
+    prepared: ProviderPlanPreparation,
+) -> dict[str, object]:
+    preview = prepared.preview_result
+    return {
+        "task_id": None,
+        "plan_text": prepared.response.text,
+        "dry_run": True,
+        "memory_hit_count": 0,
+        "verification_steps": [],
+        "verification_passed": None,
+        "events": ["execution_previewed"],
+        "planned_changes": [
+            operation.to_dict()
+            for operation in prepared.execution_plan.operations
+        ],
+        "preview_changes": preview.preview_changes_as_dicts(),
+        "applied_changes": [],
+        "diff_stat": "",
+        "execution_error": None,
+        "file_diffs": preview.file_diffs_as_dicts(),
+        "preview_fingerprint": preview.preview_fingerprint,
+        **_provider_metadata(
+            prepared.provider_name,
+            prepared.model,
+            prepared.response.usage,
+        ),
     }
 
 
@@ -150,10 +207,60 @@ def _confirm_apply(args: Namespace) -> bool:
     return answer == "yes"
 
 
-def run_command(args: Namespace) -> int:
-    if args.apply and args.plan_file is None and not args.use_provider_plan:
-        sys.stderr.write("--plan-file or --use-provider-plan is required when --apply is used\n")
-        return 2
+def _validate_run_arguments(args: Namespace) -> None:
+    if args.provider == "fake":
+        if args.fake_response is None:
+            raise ValueError("fake 模式必须传入 --fake-response")
+        if args.apply and args.plan_file is None and not args.use_provider_plan:
+            raise ValueError(
+                "--plan-file or --use-provider-plan is required when --apply is used"
+            )
+        return
+    conflicts: list[str] = []
+    if args.fake_response is not None:
+        conflicts.append("--fake-response")
+    if args.use_provider_plan:
+        conflicts.append("--use-provider-plan")
+    if args.plan_file is not None:
+        conflicts.append("--plan-file")
+    if conflicts:
+        raise ValueError(
+            f"openai-compatible 不能与 {', '.join(conflicts)} 同时使用"
+        )
+
+
+def _result_payload(
+    result,
+    preview_result: ExecutionResult,
+) -> dict[str, object]:
+    return {
+        "task_id": result.task_id,
+        "plan_text": result.plan_text,
+        "dry_run": result.dry_run,
+        "memory_hit_count": result.memory_hit_count,
+        "verification_steps": result.verification_steps,
+        "verification_passed": (
+            None
+            if result.verification_result is None
+            else result.verification_result.passed
+        ),
+        "events": result.events,
+        "planned_changes": result.planned_changes,
+        "preview_changes": preview_result.preview_changes_as_dicts(),
+        "applied_changes": result.applied_changes,
+        "diff_stat": result.diff_stat,
+        "execution_error": result.execution_error,
+        "file_diffs": result.file_diffs,
+        "preview_fingerprint": result.preview_fingerprint,
+        **_provider_metadata(
+            result.provider,
+            result.model,
+            result.provider_usage,
+        ),
+    }
+
+
+def _run_fake_command(args: Namespace) -> int:
     try:
         execution_plan = _resolve_execution_plan(args)
     except ValueError as exc:
@@ -176,7 +283,7 @@ def run_command(args: Namespace) -> int:
     runner = LocalTaskRunner(
         repo_root=Path.cwd(),
         home_dir=Path.home(),
-        provider=FakeProvider(name="fake-main", responses=[args.fake_response]),
+        provider=FakeProvider(name="fake", responses=[args.fake_response]),
     )
     result = runner.run(
         args.request,
@@ -188,24 +295,71 @@ def run_command(args: Namespace) -> int:
             expected_preview_fingerprint=preview_result.preview_fingerprint or None,
         ),
     )
-    payload = {
-        "task_id": result.task_id,
-        "plan_text": result.plan_text,
-        "dry_run": result.dry_run,
-        "memory_hit_count": result.memory_hit_count,
-        "verification_steps": result.verification_steps,
-        "verification_passed": None if result.verification_result is None else result.verification_result.passed,
-        "events": result.events,
-        "planned_changes": result.planned_changes,
-        "preview_changes": preview_result.preview_changes_as_dicts(),
-        "applied_changes": result.applied_changes,
-        "diff_stat": result.diff_stat,
-        "execution_error": result.execution_error,
-        "file_diffs": result.file_diffs,
-        "preview_fingerprint": result.preview_fingerprint,
-    }
+    payload = _result_payload(result, preview_result)
     sys.stdout.write(_json(payload))
     return 1 if result.execution_error else 0
+
+
+def _run_openai_compatible_command(args: Namespace) -> int:
+    try:
+        config = load_openai_compatible_config(Path.home())
+        api_key = resolve_openai_compatible_api_key(config, os.environ)
+        provider = OpenAICompatibleProvider(config, api_key)
+        prepared = prepare_provider_execution_plan(
+            repo_root=Path.cwd(),
+            home_dir=Path.home(),
+            user_request=args.request,
+            provider=provider,
+            model=config.model,
+        )
+    except (
+        ProviderConfigError,
+        ProviderError,
+        BudgetExceeded,
+        ExecutionPlanError,
+    ) as exc:
+        sys.stderr.write(str(exc) + "\n")
+        return 2
+    if not args.apply:
+        sys.stdout.write(_json(_prepared_preview_payload(prepared)))
+        return 0
+    if not _confirm_apply(args):
+        sys.stderr.write(
+            "应用执行计划需要确认；请传入 --yes 或在交互式终端输入 yes。\n"
+        )
+        return 2
+    runner = LocalTaskRunner(
+        repo_root=Path.cwd(),
+        home_dir=Path.home(),
+        provider=provider,
+    )
+    result = runner.run(
+        args.request,
+        TaskRunOptions(
+            dry_run=args.dry_run,
+            run_verification=args.verify,
+            apply_changes=True,
+            execution_plan=prepared.execution_plan,
+            expected_preview_fingerprint=(
+                prepared.preview_result.preview_fingerprint
+            ),
+            prepared_response=prepared.response,
+            provider_model=prepared.model,
+        ),
+    )
+    sys.stdout.write(_json(_result_payload(result, prepared.preview_result)))
+    return 1 if result.execution_error else 0
+
+
+def run_command(args: Namespace) -> int:
+    try:
+        _validate_run_arguments(args)
+    except ValueError as exc:
+        sys.stderr.write(str(exc) + "\n")
+        return 2
+    if args.provider == "openai-compatible":
+        return _run_openai_compatible_command(args)
+    return _run_fake_command(args)
 
 
 def serve_command(args: Namespace) -> int:
@@ -255,7 +409,12 @@ def build_parser() -> ArgumentParser:
 
     run_parser = subparsers.add_parser("run")
     run_parser.add_argument("request")
-    run_parser.add_argument("--fake-response", required=True)
+    run_parser.add_argument(
+        "--provider",
+        choices=["fake", "openai-compatible"],
+        default="fake",
+    )
+    run_parser.add_argument("--fake-response")
     run_parser.add_argument("--dry-run", action="store_true", default=True)
     run_parser.add_argument("--verify", action="store_true")
     run_parser.add_argument("--plan-file")

@@ -1,16 +1,31 @@
+from collections.abc import Iterator
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import os
 import subprocess
 import sys
 from pathlib import Path
+import threading
+
+import pytest
 
 
-def run_cli(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
+def run_cli(
+    repo: Path,
+    *args: str,
+    home: Path | None = None,
+    extra_env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     project_src = Path(__file__).resolve().parents[1] / "src"
     env = os.environ.copy()
     env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONUTF8"] = "1"
     env["PYTHONPATH"] = str(project_src)
+    if home is not None:
+        env["HOME"] = str(home)
+        env["USERPROFILE"] = str(home)
+    if extra_env is not None:
+        env.update(extra_env)
     return subprocess.run(
         [sys.executable, "-m", "dev_agent.cli", *args],
         cwd=repo,
@@ -19,6 +34,105 @@ def run_cli(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
         encoding="utf-8",
         capture_output=True,
         check=False,
+    )
+
+
+class CliProviderServer(HTTPServer):
+    request_count: int
+    requests: list[dict[str, object]]
+    response_body: bytes
+    response_status: int
+
+    @property
+    def base_url(self) -> str:
+        host, port = self.server_address
+        return f"http://{host}:{port}"
+
+
+class CliProviderHandler(BaseHTTPRequestHandler):
+    server: CliProviderServer
+
+    def do_POST(self) -> None:
+        length = int(self.headers.get("Content-Length", "0"))
+        body = self.rfile.read(length)
+        self.server.request_count += 1
+        self.server.requests.append(
+            {
+                "path": self.path,
+                "authorization": self.headers.get("Authorization"),
+                "json": json.loads(body.decode("utf-8")),
+            }
+        )
+        self.send_response(self.server.response_status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(self.server.response_body)))
+        self.end_headers()
+        self.wfile.write(self.server.response_body)
+
+    def log_message(self, format: str, *args: object) -> None:
+        return
+
+
+@pytest.fixture
+def provider_server_factory() -> Iterator:
+    servers: list[tuple[CliProviderServer, threading.Thread]] = []
+
+    def start(content: str, *, status: int = 200) -> CliProviderServer:
+        payload = {"choices": [{"message": {"content": content}}]}
+        server = CliProviderServer(("127.0.0.1", 0), CliProviderHandler)
+        server.request_count = 0
+        server.requests = []
+        server.response_body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        server.response_status = status
+        thread = threading.Thread(
+            target=server.serve_forever,
+            kwargs={"poll_interval": 0.01},
+            daemon=True,
+        )
+        thread.start()
+        servers.append((server, thread))
+        return server
+
+    yield start
+
+    for server, thread in servers:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def write_provider_config(home: Path, base_url: str) -> None:
+    path = home / ".dev-agent" / "provider.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "\n".join(
+            [
+                "openai_compatible:",
+                f"  base_url: {base_url}/v1",
+                "  model: model-name",
+                "  api_key_env: DEV_AGENT_API_KEY",
+                "  timeout_seconds: 5",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
+def strict_cli_plan() -> str:
+    return json.dumps(
+        {
+            "summary": "创建 CLI 说明",
+            "operations": [
+                {
+                    "action": "create_text",
+                    "path": "docs/cli-provider.md",
+                    "content": "CLI 中文\n",
+                }
+            ],
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
     )
 
 
@@ -108,6 +222,9 @@ def test_run_uses_fake_response_and_records_history(tmp_path: Path) -> None:
     assert payload["plan_text"] == "计划：读取文件并运行测试。"
     assert payload["dry_run"] is True
     assert payload["verification_steps"] == [["python", "-m", "pytest"]]
+    assert payload["provider"] == "fake"
+    assert payload["model"] is None
+    assert payload["provider_usage"]["request_count"] == 1
     assert payload["file_diffs"] == []
     assert payload["preview_fingerprint"] == ""
     history = (tmp_path / ".agent" / "history" / "tasks.jsonl").read_text(encoding="utf-8")
@@ -609,3 +726,198 @@ def test_run_rejects_plan_file_with_use_provider_plan(tmp_path: Path) -> None:
     assert result.returncode == 2
     assert "--plan-file 不能与 --use-provider-plan 同时使用" in result.stderr
     assert not (tmp_path / "docs" / "file.md").exists()
+
+
+def test_run_defaults_to_fake_and_requires_fake_response(tmp_path: Path) -> None:
+    result = run_cli(tmp_path, "run", "离线请求")
+
+    assert result.returncode == 2
+    assert "fake 模式必须传入 --fake-response" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "conflicting_args",
+    [
+        ("--fake-response", "{}"),
+        ("--use-provider-plan",),
+        ("--plan-file", "plan.json"),
+    ],
+)
+def test_openai_compatible_rejects_fake_inputs_before_network(
+    tmp_path: Path,
+    conflicting_args: tuple[str, ...],
+) -> None:
+    result = run_cli(
+        tmp_path,
+        "run",
+        "冲突",
+        "--provider",
+        "openai-compatible",
+        *conflicting_args,
+        home=tmp_path,
+    )
+
+    assert result.returncode == 2
+    assert "openai-compatible 不能与" in result.stderr
+    assert not (tmp_path / ".agent").exists()
+
+
+def test_openai_compatible_preview_requests_once_and_does_not_write(
+    tmp_path: Path,
+    provider_server_factory,
+) -> None:
+    home = tmp_path / "home"
+    server = provider_server_factory(strict_cli_plan())
+    write_provider_config(home, server.base_url)
+
+    result = run_cli(
+        tmp_path,
+        "run",
+        "创建说明",
+        "--provider",
+        "openai-compatible",
+        home=home,
+        extra_env={"DEV_AGENT_API_KEY": "cli-secret-key"},
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["provider"] == "openai-compatible"
+    assert payload["model"] == "model-name"
+    assert payload["provider_usage"]["request_count"] == 1
+    assert payload["preview_changes"][0]["path"] == "docs/cli-provider.md"
+    assert payload["file_diffs"][0]["status"] == "added"
+    assert payload["task_id"] is None
+    assert server.request_count == 1
+    assert server.requests[0]["path"] == "/v1/chat/completions"
+    assert server.requests[0]["authorization"] == "Bearer cli-secret-key"
+    assert set(server.requests[0]["json"]) == {"model", "messages"}
+    assert not (tmp_path / "docs" / "cli-provider.md").exists()
+    assert not (tmp_path / ".agent").exists()
+    assert "cli-secret-key" not in result.stdout
+    assert "cli-secret-key" not in result.stderr
+
+
+def test_openai_compatible_apply_yes_reuses_one_response(
+    tmp_path: Path,
+    provider_server_factory,
+) -> None:
+    home = tmp_path / "home"
+    server = provider_server_factory(strict_cli_plan())
+    write_provider_config(home, server.base_url)
+
+    result = run_cli(
+        tmp_path,
+        "run",
+        "创建说明",
+        "--provider",
+        "openai-compatible",
+        "--apply",
+        "--yes",
+        home=home,
+        extra_env={"DEV_AGENT_API_KEY": "cli-secret-key"},
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["provider_usage"]["request_count"] == 1
+    assert payload["applied_changes"][0]["path"] == "docs/cli-provider.md"
+    assert server.request_count == 1
+    assert (tmp_path / "docs" / "cli-provider.md").read_text(
+        encoding="utf-8"
+    ) == "CLI 中文\n"
+    history = (tmp_path / ".agent" / "history" / "tasks.jsonl").read_text(
+        encoding="utf-8"
+    )
+    assert "cli-secret-key" not in history
+
+
+def test_openai_compatible_missing_config_fails_before_network(
+    tmp_path: Path,
+) -> None:
+    result = run_cli(
+        tmp_path,
+        "run",
+        "请求",
+        "--provider",
+        "openai-compatible",
+        home=tmp_path,
+        extra_env={"DEV_AGENT_API_KEY": "cli-secret-key"},
+    )
+
+    assert result.returncode == 2
+    assert "Provider 配置文件不存在" in result.stderr
+    assert "cli-secret-key" not in result.stderr
+
+
+def test_openai_compatible_missing_key_fails_before_network(
+    tmp_path: Path,
+    provider_server_factory,
+) -> None:
+    home = tmp_path / "home"
+    server = provider_server_factory(strict_cli_plan())
+    write_provider_config(home, server.base_url)
+    env = os.environ.copy()
+    env.pop("DEV_AGENT_API_KEY", None)
+
+    result = run_cli(
+        tmp_path,
+        "run",
+        "请求",
+        "--provider",
+        "openai-compatible",
+        home=home,
+        extra_env={"DEV_AGENT_API_KEY": ""},
+    )
+
+    assert result.returncode == 2
+    assert "环境变量 DEV_AGENT_API_KEY" in result.stderr
+    assert server.request_count == 0
+
+
+def test_openai_compatible_429_is_not_retried_or_leaked(
+    tmp_path: Path,
+    provider_server_factory,
+) -> None:
+    home = tmp_path / "home"
+    server = provider_server_factory("ignored", status=429)
+    write_provider_config(home, server.base_url)
+
+    result = run_cli(
+        tmp_path,
+        "run",
+        "请求",
+        "--provider",
+        "openai-compatible",
+        home=home,
+        extra_env={"DEV_AGENT_API_KEY": "cli-secret-key"},
+    )
+
+    assert result.returncode == 2
+    assert "HTTP 429" in result.stderr
+    assert "cli-secret-key" not in result.stderr
+    assert server.request_count == 1
+
+
+def test_openai_compatible_malformed_plan_does_not_write(
+    tmp_path: Path,
+    provider_server_factory,
+) -> None:
+    home = tmp_path / "home"
+    server = provider_server_factory("不是 JSON 计划")
+    write_provider_config(home, server.base_url)
+
+    result = run_cli(
+        tmp_path,
+        "run",
+        "请求",
+        "--provider",
+        "openai-compatible",
+        home=home,
+        extra_env={"DEV_AGENT_API_KEY": "cli-secret-key"},
+    )
+
+    assert result.returncode == 2
+    assert "无法解析 provider 执行计划" in result.stderr
+    assert server.request_count == 1
+    assert not (tmp_path / ".agent").exists()
