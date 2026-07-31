@@ -30,3 +30,16 @@ def test_parse_provider_execution_plan_accepts_strict_json_object() -> None:
 def test_parse_provider_execution_plan_rejects_invalid_provider_text(text: str) -> None:
     with pytest.raises(ExecutionPlanError, match="无法解析 provider 执行计划"):
         parse_provider_execution_plan(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        '{"operations":[{"action":"create_text","path":"docs/a.md","content":"x"}]}',
+        '{"summary":"额外顶层字段","operations":[{"action":"create_text","path":"docs/a.md","content":"x"}],"extra":true}',
+        '{"summary":"额外操作字段","operations":[{"action":"create_text","path":"docs/a.md","content":"x","mode":"unsafe"}]}',
+    ],
+)
+def test_parse_provider_execution_plan_requires_exact_fields(text: str) -> None:
+    with pytest.raises(ExecutionPlanError, match="无法解析 provider 执行计划"):
+        parse_provider_execution_plan(text)

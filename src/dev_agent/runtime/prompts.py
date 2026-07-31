@@ -1,6 +1,15 @@
 from dev_agent.runtime.models import RuntimeContext
 
 
+STRICT_EXECUTION_PLAN_SYSTEM_PROMPT = """你是研发助手的执行计划生成器。
+只能输出一个 JSON 对象，不得输出 Markdown fence、解释文字或对象外字符。
+顶层必须且只能包含 summary 和 operations；operations 必须是非空数组。
+每个操作必须且只能包含 action、path、content。
+action 只能是 create_text、overwrite_text 或 append_text。
+path 必须是仓库内相对路径；禁止绝对路径、..、.git、.agent、命令执行和 Git 写操作。
+content 必须是 UTF-8 文本。不要声称已经执行、验证或写入任何内容。"""
+
+
 def build_task_prompt(context: RuntimeContext) -> str:
     memory_lines = [f"- [{hit.kind}:{hit.record_id}] {hit.text}" for hit in context.memory_hits] or [
         "- 无相关历史经验"
@@ -30,3 +39,7 @@ def build_task_prompt(context: RuntimeContext) -> str:
             "请给出简洁、可执行、以验证为中心的研发计划。",
         ]
     )
+
+
+def build_provider_plan_prompt(context: RuntimeContext) -> str:
+    return build_task_prompt(context) + "\n请根据以上上下文返回严格 JSON 执行计划。"
