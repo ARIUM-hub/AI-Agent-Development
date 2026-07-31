@@ -75,6 +75,7 @@ h1 {
 }
 
 .panel {
+  min-width: 0;
   min-height: 260px;
   padding: 22px;
   border: 1px solid var(--line);
@@ -199,6 +200,355 @@ button:disabled {
   font-size: 0.82rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.context-card-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.context-overview-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.context-card {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.52);
+  box-shadow: 0 12px 28px rgba(31, 45, 33, 0.08);
+}
+
+.context-project-card {
+  border-color: rgba(82, 107, 74, 0.34);
+  background: rgba(238, 247, 231, 0.72);
+}
+
+.context-git-card.context-git-clean {
+  border-color: rgba(82, 107, 74, 0.34);
+  background: rgba(238, 247, 231, 0.66);
+}
+
+.context-git-card.context-git-changed {
+  border-color: rgba(201, 112, 74, 0.46);
+  background: rgba(255, 244, 232, 0.86);
+}
+
+.context-git-card.context-git-unknown {
+  background: rgba(255, 255, 255, 0.56);
+}
+
+.context-card h3 {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.context-card-kicker,
+.context-label,
+.context-command-label {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.context-card-kicker {
+  margin-bottom: 5px;
+  color: var(--moss);
+}
+
+.context-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.context-status-badge {
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.68);
+  font-size: 0.76rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.context-status-badge.context-git-clean {
+  color: #2f5b2d;
+  background: rgba(229, 244, 218, 0.9);
+}
+
+.context-status-badge.context-git-changed {
+  color: #8b3f1e;
+  background: rgba(255, 232, 211, 0.95);
+}
+
+.context-status-badge.context-git-unknown {
+  color: var(--muted);
+}
+
+.context-path,
+.context-preference,
+.context-empty-state {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.context-path {
+  margin-top: 8px;
+}
+
+.context-field-grid,
+.context-git-grid,
+.context-preferences {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.context-field-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.context-field,
+.context-git-section,
+.context-preference {
+  min-width: 0;
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(255, 252, 244, 0.62);
+}
+
+.context-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.context-tag {
+  max-width: 100%;
+  border: 1px solid rgba(82, 107, 74, 0.24);
+  border-radius: 999px;
+  padding: 3px 8px;
+  color: var(--moss);
+  background: rgba(255, 255, 255, 0.68);
+  font-size: 0.78rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.context-git-output,
+.context-rule-text {
+  min-height: auto;
+  margin-top: 7px;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.context-command-list {
+  display: grid;
+  gap: 9px;
+  margin-top: 12px;
+}
+
+.context-command-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(255, 252, 244, 0.7);
+}
+
+.context-command-main {
+  min-width: 0;
+}
+
+.context-command-code {
+  display: block;
+  margin-top: 5px;
+  color: var(--ink);
+  font: 0.82rem/1.5 Consolas, "Microsoft YaHei UI", monospace;
+  overflow-wrap: anywhere;
+}
+
+.context-copy-button {
+  min-height: 44px;
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.context-copy-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.context-rule-detail {
+  margin-top: 10px;
+  border-radius: 12px;
+  padding: 9px 10px;
+  background: rgba(255, 252, 244, 0.64);
+}
+
+.context-rule-detail summary {
+  cursor: pointer;
+  color: var(--moss);
+  font-weight: 800;
+}
+
+.history-card-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.history-empty-state,
+.history-card {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.history-empty-state {
+  padding: 14px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.history-card {
+  padding: 14px;
+  box-shadow: 0 12px 28px rgba(31, 45, 33, 0.08);
+}
+
+.history-card.history-status-passed {
+  border-color: rgba(82, 107, 74, 0.34);
+  background: rgba(238, 247, 231, 0.72);
+}
+
+.history-card.history-status-failed {
+  border-color: rgba(154, 55, 45, 0.36);
+  background: rgba(255, 238, 232, 0.86);
+}
+
+.history-card.history-status-running {
+  border-color: rgba(64, 112, 111, 0.34);
+  background: rgba(235, 247, 244, 0.74);
+}
+
+.history-card.history-status-planned,
+.history-card.history-status-unknown {
+  border-color: rgba(29, 38, 31, 0.16);
+  background: rgba(255, 255, 255, 0.56);
+}
+
+.history-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.history-card-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.history-status-badge {
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 10px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.64);
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.history-status-badge.history-status-passed {
+  color: #2f5b2d;
+  background: rgba(229, 244, 218, 0.9);
+}
+
+.history-status-badge.history-status-failed {
+  color: #7a251d;
+  background: rgba(255, 223, 216, 0.95);
+}
+
+.history-status-badge.history-status-running {
+  color: #285f5a;
+  background: rgba(222, 244, 240, 0.95);
+}
+
+.history-summary,
+.history-meta,
+.history-task-id {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.history-summary {
+  margin: 10px 0 0;
+  color: var(--ink);
+}
+
+.history-meta,
+.history-task-id {
+  margin: 8px 0 0;
+}
+
+.history-detail {
+  margin-top: 10px;
+  border-radius: 12px;
+  padding: 9px 10px;
+  background: rgba(255, 252, 244, 0.64);
+}
+
+.history-detail summary {
+  cursor: pointer;
+  color: var(--moss);
+  font-weight: 800;
+}
+
+.history-detail-section h5 {
+  margin: 12px 0 6px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.history-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--ink);
+  font-size: 0.84rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
 }
 
 .preview-card-list {
@@ -487,9 +837,20 @@ button:disabled {
     flex-direction: column;
   }
 
+  .context-card-header,
+  .history-card-header,
   .preview-card-header,
   .audit-card-header {
     flex-direction: column;
+  }
+
+  .context-field-grid,
+  .context-command-row {
+    grid-template-columns: 1fr;
+  }
+
+  .context-copy-button {
+    width: 100%;
   }
 
   .risk-badge {
