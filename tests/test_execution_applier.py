@@ -2,8 +2,34 @@ import pytest
 
 from dev_agent.encoding import read_text_utf8, write_text_utf8
 from dev_agent.execution.applier import ExecutionPlanApplier
-from dev_agent.execution.models import ExecutionOperation, ExecutionPlan
+from dev_agent.execution.models import ExecutionFileDiff, ExecutionOperation, ExecutionPlan, ExecutionResult
 from dev_agent.execution.plan import ExecutionPlanError
+
+
+def test_execution_result_serializes_file_diffs() -> None:
+    file_diff = ExecutionFileDiff(
+        path="docs/example.md",
+        status="added",
+        diff_text="--- /dev/null\n+++ b/docs/example.md\n",
+        additions=1,
+        deletions=0,
+        diff_line_count=2,
+        diff_char_count=42,
+        displayed_line_count=2,
+        displayed_char_count=42,
+        truncated=False,
+        before_line_ending="none",
+        after_line_ending="lf",
+    )
+    result = ExecutionResult(
+        applied=False,
+        planned_changes=[],
+        file_diffs=[file_diff],
+        preview_fingerprint="sha256:abc",
+    )
+
+    assert result.file_diffs_as_dicts() == [file_diff.to_dict()]
+    assert result.preview_fingerprint == "sha256:abc"
 
 
 def test_applier_creates_overwrites_and_appends_utf8_text(tmp_path) -> None:
