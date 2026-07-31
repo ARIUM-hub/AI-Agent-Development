@@ -5,7 +5,7 @@ from dev_agent.config.loader import load_agent_context
 from dev_agent.encoding import UTF8
 from dev_agent.execution.applier import ExecutionPlanApplier
 from dev_agent.execution.models import ExecutionPlan, ExecutionResult
-from dev_agent.execution.plan import ExecutionPlanError
+from dev_agent.execution.plan import ExecutionPlanError, StaleExecutionPreviewError
 from dev_agent.execution.provider_plan import parse_provider_execution_plan
 from dev_agent.memory.store import MemoryStore
 from dev_agent.project.scanner import scan_project
@@ -113,6 +113,8 @@ def _provider_plan_payload(
         "applied_changes": applied_changes or [],
         "diff_stat": diff_stat,
         "execution_error": execution_error,
+        "file_diffs": preview_result.file_diffs_as_dicts(),
+        "preview_fingerprint": preview_result.preview_fingerprint,
     }
 
 
@@ -137,12 +139,17 @@ def apply_provider_plan_task(
     home_dir: Path,
     request_text: str,
     fake_response: str,
+    preview_fingerprint: str,
 ) -> dict[str, object]:
     if not request_text.strip():
         raise ValueError("request_text is required")
     if not fake_response.strip():
         raise ValueError("fake_response is required for provider plan apply")
+    if not preview_fingerprint.strip():
+        raise ValueError("preview_fingerprint is required")
     plan, preview = _provider_preview(repo_root, fake_response)
+    if preview.preview_fingerprint != preview_fingerprint:
+        raise StaleExecutionPreviewError("文件状态已变化，请重新预览后再执行")
     runner = LocalTaskRunner(
         repo_root=repo_root,
         home_dir=home_dir,
@@ -155,6 +162,7 @@ def apply_provider_plan_task(
             run_verification=False,
             apply_changes=True,
             execution_plan=plan,
+            expected_preview_fingerprint=preview_fingerprint,
         ),
     )
     return _provider_plan_payload(
@@ -201,4 +209,6 @@ def run_dry_run_task(
         "applied_changes": [],
         "diff_stat": "",
         "execution_error": None,
+        "file_diffs": [],
+        "preview_fingerprint": "",
     }
