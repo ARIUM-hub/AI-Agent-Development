@@ -241,3 +241,19 @@ def test_connection_failure_is_provider_error() -> None:
         make_provider(f"http://{host}:{port}").complete(ModelRequest(prompt="请求"))
 
     assert "secret-for-test" not in str(caught.value)
+
+
+@pytest.mark.parametrize("api_key", ["秘密-key", "line1\nline2"])
+def test_invalid_authorization_header_is_redacted(
+    local_server,
+    api_key: str,
+) -> None:
+    server, base_url = local_server(successful_payload("ok"))
+
+    with pytest.raises(ProviderError, match="无法发送模型请求") as caught:
+        make_provider(base_url, api_key=api_key).complete(
+            ModelRequest(prompt="请求")
+        )
+
+    assert api_key not in str(caught.value)
+    assert server.request_count == 0

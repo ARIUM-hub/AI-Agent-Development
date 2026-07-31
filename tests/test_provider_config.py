@@ -65,6 +65,7 @@ def test_timeout_defaults_to_sixty_seconds(tmp_path: Path) -> None:
         "https://example.com/v1#fragment",
         "ftp://example.com/v1",
         "https:///v1",
+        "https://example.com:not-a-port/v1",
     ],
 )
 def test_rejects_unsafe_urls(tmp_path: Path, base_url: str) -> None:
@@ -107,6 +108,20 @@ def test_rejects_unknown_non_sensitive_field(tmp_path: Path) -> None:
 
     with pytest.raises(ProviderConfigError, match="未知字段"):
         load_openai_compatible_config(tmp_path)
+
+
+def test_rejects_unknown_sensitive_root_field_without_leaking_value(
+    tmp_path: Path,
+) -> None:
+    write_config(
+        tmp_path,
+        valid_config() + 'api_key: "root-secret-value"\n',
+    )
+
+    with pytest.raises(ProviderConfigError) as caught:
+        load_openai_compatible_config(tmp_path)
+
+    assert "root-secret-value" not in str(caught.value)
 
 
 def test_missing_config_file_is_rejected(tmp_path: Path) -> None:

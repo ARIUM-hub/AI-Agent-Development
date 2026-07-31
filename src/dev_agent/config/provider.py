@@ -43,6 +43,12 @@ def _required_text(data: Mapping[str, object], field: str) -> str:
 
 def _validated_base_url(value: str) -> str:
     parsed = urlsplit(value)
+    try:
+        parsed.port
+    except ValueError:
+        raise ProviderConfigError(
+            "openai_compatible.base_url 包含非法端口"
+        ) from None
     unsafe_parts = (
         not parsed.hostname
         or parsed.username is not None
@@ -73,6 +79,10 @@ def load_openai_compatible_config(home_dir: Path) -> OpenAICompatibleConfig:
         document.get("openai_compatible"), dict
     ):
         raise ProviderConfigError("Provider 配置必须包含 openai_compatible 映射")
+    if set(document) != {"openai_compatible"}:
+        raise ProviderConfigError(
+            "Provider 配置根节点只能包含 openai_compatible"
+        )
 
     data = document["openai_compatible"]
     sensitive = sorted(

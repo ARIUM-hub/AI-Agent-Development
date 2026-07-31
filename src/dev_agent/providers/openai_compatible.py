@@ -57,6 +57,8 @@ class OpenAICompatibleProvider:
             ) from None
         except (TimeoutError, socket.timeout):
             raise ProviderError("模型请求超时，未自动重试") from None
+        except ValueError:
+            raise ProviderError("无法发送模型请求，认证信息格式无效") from None
         except (URLError, OSError):
             raise ProviderError("无法连接模型服务，未自动重试") from None
 
