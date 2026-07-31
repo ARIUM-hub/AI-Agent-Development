@@ -108,6 +108,8 @@ def test_run_uses_fake_response_and_records_history(tmp_path: Path) -> None:
     assert payload["plan_text"] == "计划：读取文件并运行测试。"
     assert payload["dry_run"] is True
     assert payload["verification_steps"] == [["python", "-m", "pytest"]]
+    assert payload["file_diffs"] == []
+    assert payload["preview_fingerprint"] == ""
     history = (tmp_path / ".agent" / "history" / "tasks.jsonl").read_text(encoding="utf-8")
     assert "实现 history 查询" in history
 
@@ -159,6 +161,9 @@ def test_run_applies_plan_file_and_reports_changes(tmp_path: Path) -> None:
     payload = json.loads(result.stdout)
     assert payload["execution_error"] is None
     assert payload["applied_changes"][0]["path"] == "docs/execution.md"
+    assert payload["file_diffs"][0]["path"] == "docs/execution.md"
+    assert payload["file_diffs"][0]["status"] == "added"
+    assert payload["preview_fingerprint"].startswith("sha256:")
     assert (tmp_path / "docs" / "execution.md").read_text(encoding="utf-8") == "执行闭环\n"
 
 
@@ -196,6 +201,9 @@ def test_run_previews_plan_file_without_apply(tmp_path: Path) -> None:
     assert payload["planned_changes"][0]["path"] == "docs/preview.md"
     assert payload["preview_changes"][0]["risk"] == "create"
     assert payload["preview_changes"][0]["content_bytes"] == len("只预览\n".encode("utf-8"))
+    assert payload["file_diffs"][0]["path"] == "docs/preview.md"
+    assert payload["file_diffs"][0]["status"] == "added"
+    assert payload["preview_fingerprint"].startswith("sha256:")
     assert payload["applied_changes"] == []
     assert not (tmp_path / ".agent").exists()
     assert not (tmp_path / "docs" / "preview.md").exists()

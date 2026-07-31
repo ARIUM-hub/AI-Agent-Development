@@ -49,6 +49,8 @@ def test_local_task_runner_generates_plan_and_records_history(tmp_path) -> None:
     assert result.dry_run is True
     assert result.verification_steps == [["python", "-m", "pytest"]]
     assert "provider_completed" in result.events
+    assert result.file_diffs == []
+    assert result.preview_fingerprint == ""
     history = (tmp_path / ".agent" / "history" / "tasks.jsonl").read_text(encoding="utf-8")
     assert "实现 history 查询" in history
     assert "计划：读取文件并运行测试。" in history
@@ -101,6 +103,9 @@ def test_local_task_runner_applies_execution_plan_and_records_diff(tmp_path) -> 
         }
     ]
     assert "execution_completed" in result.events
+    assert result.file_diffs[0]["path"] == "docs/execution.md"
+    assert result.file_diffs[0]["status"] == "added"
+    assert result.preview_fingerprint.startswith("sha256:")
     history = MemoryStore(tmp_path).list_tasks()
     assert history[-1].status == "passed"
     assert "docs/execution.md" in history[-1].summary

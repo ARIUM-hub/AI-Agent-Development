@@ -27,6 +27,7 @@ class TaskRunOptions:
     run_verification: bool = False
     apply_changes: bool = False
     execution_plan: ExecutionPlan | None = None
+    expected_preview_fingerprint: str | None = None
 
 
 @dataclass(frozen=True)
@@ -42,3 +43,5 @@ class TaskRunResult:
     applied_changes: list[dict[str, object]] = field(default_factory=list)
     diff_stat: str = ""
     execution_error: str | None = None
+    file_diffs: list[dict[str, object]] = field(default_factory=list)
+    preview_fingerprint: str = ""

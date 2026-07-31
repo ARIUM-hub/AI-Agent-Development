@@ -37,7 +37,14 @@ class LocalTaskRunner:
         try:
             execution_result = self._execution_preview(options)
             if options.apply_changes:
-                execution_result = self._apply_execution_plan(options)
+                expected_fingerprint = (
+                    options.expected_preview_fingerprint
+                    or execution_result.preview_fingerprint
+                )
+                execution_result = self._apply_execution_plan(
+                    options,
+                    expected_fingerprint,
+                )
                 task = update_task_status(self.repo_root, task.task_id, TaskStatus.RUNNING, "execution_completed")
                 events = [*task.events]
         except ExecutionPlanError as exc:
@@ -62,6 +69,8 @@ class LocalTaskRunner:
                 applied_changes=execution_result.changes_as_dicts(),
                 diff_stat=execution_result.diff_stat,
                 execution_error=execution_error,
+                file_diffs=execution_result.file_diffs_as_dicts(),
+                preview_fingerprint=execution_result.preview_fingerprint,
             )
         if options.run_verification:
             verification_result = VerificationRunner(self.repo_root).run(context.verification_plan)
@@ -90,6 +99,8 @@ class LocalTaskRunner:
             applied_changes=execution_result.changes_as_dicts(),
             diff_stat=execution_result.diff_stat,
             execution_error=execution_error,
+            file_diffs=execution_result.file_diffs_as_dicts(),
+            preview_fingerprint=execution_result.preview_fingerprint,
         )
 
     def _execution_preview(self, options: TaskRunOptions) -> ExecutionResult:
@@ -97,10 +108,17 @@ class LocalTaskRunner:
             return ExecutionResult(applied=False, planned_changes=[])
         return ExecutionPlanApplier(self.repo_root).preview(options.execution_plan)
 
-    def _apply_execution_plan(self, options: TaskRunOptions) -> ExecutionResult:
+    def _apply_execution_plan(
+        self,
+        options: TaskRunOptions,
+        expected_fingerprint: str,
+    ) -> ExecutionResult:
         if options.execution_plan is None:
             raise ExecutionPlanError("execution_plan is required when apply_changes is true")
-        return ExecutionPlanApplier(self.repo_root).apply(options.execution_plan)
+        return ExecutionPlanApplier(self.repo_root).apply(
+            options.execution_plan,
+            expected_fingerprint=expected_fingerprint,
+        )
 
     def _build_summary(self, plan_text: str, execution_result: ExecutionResult) -> str:
         if not execution_result.applied:

@@ -777,6 +777,105 @@ button:disabled {
   white-space: pre-wrap;
 }
 
+.provider-diff-view {
+  min-width: 0;
+  margin-top: 16px;
+}
+
+.diff-browser {
+  display: grid;
+  grid-template-columns: minmax(12rem, 0.34fr) minmax(0, 1fr);
+  gap: 1rem;
+  min-width: 0;
+}
+
+.diff-file-navigation {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.diff-file-button {
+  min-height: 44px;
+  margin: 0;
+  border-color: rgba(82, 107, 74, 0.24);
+  padding: 10px 12px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.58);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.diff-file-button[aria-selected="true"] {
+  border-color: var(--moss);
+  background: rgba(238, 247, 231, 0.92);
+  box-shadow: 0 8px 20px rgba(31, 45, 33, 0.12);
+}
+
+.diff-current-panel,
+.diff-empty-state {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.diff-current-panel {
+  overflow: hidden;
+}
+
+.diff-empty-state {
+  padding: 14px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.diff-current-path,
+.diff-current-meta {
+  margin: 0;
+  padding-inline: 14px;
+  overflow-wrap: anywhere;
+}
+
+.diff-current-path {
+  padding-top: 14px;
+  font-size: 1rem;
+}
+
+.diff-current-meta {
+  padding-top: 6px;
+  padding-bottom: 12px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.execution-diff {
+  min-height: auto;
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  overflow-x: auto;
+  white-space: pre;
+  tab-size: 2;
+}
+
+.diff-truncation-note {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  border-top: 1px solid rgba(201, 112, 74, 0.3);
+  padding: 10px 14px;
+  color: #7a4a18;
+  background: rgba(255, 244, 214, 0.96);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
 .danger {
   margin: 12px 0 0;
   border: 1px solid rgba(154, 55, 45, 0.36);
@@ -830,7 +929,7 @@ button:disabled {
   }
 
   .approval-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .button-row {
@@ -855,5 +954,21 @@ button:disabled {
 
   .risk-badge {
     white-space: normal;
+  }
+
+  .diff-browser {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .diff-file-navigation {
+    max-width: 100%;
+    flex-direction: row;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .diff-file-button {
+    flex: 0 0 auto;
+    max-width: min(82vw, 22rem);
   }
 }

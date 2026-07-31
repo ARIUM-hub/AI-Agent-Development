@@ -494,7 +494,9 @@ const providerApplyButton = () => document.getElementById("confirm-provider-appl
 const providerStatus = () => document.getElementById("provider-status");
 const providerError = () => document.getElementById("provider-error");
 const providerPreviewCards = () => document.getElementById("provider-preview-cards");
+const providerPreviewDiffs = () => document.getElementById("provider-preview-diffs");
 const providerAuditCards = () => document.getElementById("provider-audit-cards");
+const providerAuditDiffs = () => document.getElementById("provider-audit-diffs");
 
 const providerRiskLabel = (risk) => {
   if (risk === "create") {
@@ -549,6 +551,15 @@ const clearProviderPreviewCards = () => {
 
 const clearProviderAuditCards = () => {
   providerAuditCards().replaceChildren();
+};
+
+const clearProviderDiffs = () => {
+  providerPreviewDiffs().replaceChildren();
+  providerAuditDiffs().replaceChildren();
+};
+
+const renderExecutionDiffs = (root, payload) => {
+  window.DevAgentDiffView.renderExecutionDiffs(root, payload);
 };
 
 const previewChangeAt = (payload, index) => {
@@ -734,6 +745,7 @@ const renderProviderAuditCards = (payload) => {
 
 const resetProviderPreview = () => {
   clearProviderAuditCards();
+  clearProviderDiffs();
   if (lastProviderPreview === null) {
     return;
   }
@@ -751,7 +763,9 @@ const postJson = async (path, payload) => {
   });
   const body = await response.json();
   if (!response.ok) {
-    throw new Error(body.error || "请求失败，请检查本地服务是否仍在运行。");
+    const error = new Error(body.error || "请求失败，请检查本地服务是否仍在运行。");
+    error.status = response.status;
+    throw error;
   }
   return body;
 };
@@ -762,6 +776,7 @@ async function submitProviderPreview(event) {
   clearProviderError();
   clearProviderPreviewCards();
   clearProviderAuditCards();
+  clearProviderDiffs();
   lastProviderPreview = null;
   providerStatus().textContent = "正在生成预览";
   renderJson("provider-apply-result", "确认执行后显示结果。");
@@ -773,11 +788,13 @@ async function submitProviderPreview(event) {
     });
     lastProviderPreview = payload;
     renderProviderPreviewCards(payload);
+    renderExecutionDiffs(providerPreviewDiffs(), payload);
     renderJson("provider-preview-result", payload);
     providerStatus().textContent = "预览通过，可以确认执行";
   } catch (error) {
     clearProviderPreviewCards();
     clearProviderAuditCards();
+    clearProviderDiffs();
     renderJson("provider-preview-result", "预览失败。");
     providerStatus().textContent = "预览失败";
     showProviderError(error.message);
@@ -795,17 +812,23 @@ async function submitProviderApply() {
     const payload = await postJson("/api/provider-plan/apply", {
       request: form.elements.request.value,
       fake_response: form.elements.fake_response.value,
+      preview_fingerprint: lastProviderPreview.preview_fingerprint,
     });
     renderProviderAuditCards(payload);
+    renderExecutionDiffs(providerAuditDiffs(), payload);
     renderJson("provider-apply-result", payload);
     providerStatus().textContent = payload.execution_error ? "执行失败" : "执行完成";
     clearProviderPreviewCards();
+    providerPreviewDiffs().replaceChildren();
     lastProviderPreview = null;
     await loadHistory();
   } catch (error) {
     renderProviderAuditFailure(error.message);
+    clearProviderDiffs();
     renderJson("provider-apply-result", "执行失败。");
-    providerStatus().textContent = "执行失败";
+    providerStatus().textContent = error.status === 409
+      ? "文件状态已变化，请重新预览"
+      : "执行失败";
     clearProviderPreviewCards();
     lastProviderPreview = null;
     showProviderError(error.message);

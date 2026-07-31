@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from dev_agent.encoding import UTF8, read_text_utf8, write_text_utf8
+from dev_agent.execution.diff import ExecutionPlanDiffer
 from dev_agent.execution.models import (
     ExecutionChange,
     ExecutionOperation,
@@ -8,13 +9,11 @@ from dev_agent.execution.models import (
     ExecutionPreviewChange,
     ExecutionResult,
 )
-from dev_agent.execution.plan import ExecutionPlanError
+from dev_agent.execution.plan import ExecutionPlanError, StaleExecutionPreviewError
+from dev_agent.execution.validation import ExecutionPlanValidator
 from dev_agent.tools.git import GitReader
 
 
-FORBIDDEN_ROOTS = {".git", ".worktrees", ".superpowers"}
-FORBIDDEN_ROOT_NAMES = {name.casefold() for name in FORBIDDEN_ROOTS}
-SUPPORTED_ACTIONS = {"create_text", "overwrite_text", "append_text"}
 CONTENT_PREVIEW_MAX_LINES = 6
 CONTENT_PREVIEW_MAX_CHARS = 600
 
@@ -22,22 +21,34 @@ CONTENT_PREVIEW_MAX_CHARS = 600
 class ExecutionPlanApplier:
     def __init__(self, repo_root: Path) -> None:
         self.repo_root = repo_root
+        self.validator = ExecutionPlanValidator(repo_root)
 
     def planned_changes(self, plan: ExecutionPlan) -> list[dict[str, object]]:
         return [operation.to_dict() for operation in plan.operations]
 
     def preview(self, plan: ExecutionPlan) -> ExecutionResult:
+        file_diffs, preview_fingerprint = ExecutionPlanDiffer(
+            self.repo_root,
+            self.validator,
+        ).build(plan)
         return ExecutionResult(
             applied=False,
             planned_changes=self.planned_changes(plan),
             preview_changes=self._preview_changes(plan),
+            file_diffs=file_diffs,
+            preview_fingerprint=preview_fingerprint,
         )
 
-    def apply(self, plan: ExecutionPlan) -> ExecutionResult:
-        self._validate_operations(plan)
+    def apply(self, plan: ExecutionPlan, *, expected_fingerprint: str) -> ExecutionResult:
+        file_diffs, current_fingerprint = ExecutionPlanDiffer(
+            self.repo_root,
+            self.validator,
+        ).build(plan)
+        if current_fingerprint != expected_fingerprint:
+            raise StaleExecutionPreviewError("文件状态已变化，请重新预览后再执行")
         changes: list[ExecutionChange] = []
         for operation in plan.operations:
-            target = self._resolve_target(operation.path)
+            target = self.validator.resolve_target(operation.path)
             before_exists = target.exists()
             if operation.action == "create_text":
                 if before_exists:
@@ -65,48 +76,9 @@ class ExecutionPlanApplier:
             planned_changes=self.planned_changes(plan),
             changes=changes,
             diff_stat=diff_stat,
+            file_diffs=file_diffs,
+            preview_fingerprint=current_fingerprint,
         )
-
-    def _resolve_target(self, raw_path: str) -> Path:
-        if not raw_path.strip():
-            raise ExecutionPlanError("path must not be empty")
-        relative = Path(raw_path)
-        if relative.is_absolute():
-            raise ExecutionPlanError(f"path must be relative: {raw_path}")
-        repo_root = self.repo_root.resolve()
-        target = (repo_root / relative).resolve()
-        try:
-            target.relative_to(repo_root)
-        except ValueError as exc:
-            raise ExecutionPlanError(f"path escapes repository: {raw_path}") from exc
-        relative_parts = target.relative_to(repo_root).parts
-        if any(part.casefold() in FORBIDDEN_ROOT_NAMES for part in relative_parts):
-            raise ExecutionPlanError(f"path is not allowed: {raw_path}")
-        return target
-
-    def _validate_operations(self, plan: ExecutionPlan) -> None:
-        planned_files: set[Path] = set()
-        for operation in plan.operations:
-            if operation.action not in SUPPORTED_ACTIONS:
-                raise ExecutionPlanError(f"unsupported action: {operation.action}")
-            target = self._resolve_target(operation.path)
-            self._validate_parent_directories(target, planned_files)
-            if target.exists() and target.is_dir():
-                raise ExecutionPlanError(f"path is a directory: {operation.path}")
-            if operation.action == "create_text":
-                if target.exists() or target in planned_files:
-                    raise ExecutionPlanError(f"path already exists: {operation.path}")
-            planned_files.add(target)
-
-    def _validate_parent_directories(self, target: Path, planned_files: set[Path]) -> None:
-        repo_root = self.repo_root.resolve()
-        for parent in target.parents:
-            if parent == repo_root:
-                return
-            if parent.exists() and not parent.is_dir():
-                raise ExecutionPlanError(f"parent path is not a directory: {parent.relative_to(repo_root)}")
-            if parent in planned_files:
-                raise ExecutionPlanError(f"parent path is not a directory: {parent.relative_to(repo_root)}")
 
     def _content_preview_for_operation(self, operation: ExecutionOperation) -> dict[str, object]:
         content = operation.content
@@ -128,12 +100,12 @@ class ExecutionPlanApplier:
         }
 
     def _preview_changes(self, plan: ExecutionPlan) -> list[ExecutionPreviewChange]:
-        self._validate_operations(plan)
+        self.validator.validate(plan)
         return [
             ExecutionPreviewChange(
                 action=operation.action,
                 path=operation.path,
-                exists=self._resolve_target(operation.path).exists(),
+                exists=self.validator.resolve_target(operation.path).exists(),
                 content_bytes=len(operation.content.encode(UTF8)),
                 risk=self._risk_for_operation(operation),
                 **self._content_preview_for_operation(operation),
@@ -147,6 +119,6 @@ class ExecutionPlanApplier:
         if operation.action == "overwrite_text":
             return "overwrite"
         if operation.action == "append_text":
-            target = self._resolve_target(operation.path)
+            target = self.validator.resolve_target(operation.path)
             return "append" if target.exists() else "append_create"
         raise ExecutionPlanError(f"unsupported action: {operation.action}")

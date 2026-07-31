@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from urllib.parse import urlparse
 
+from dev_agent.execution.plan import StaleExecutionPreviewError
 from dev_agent.web.api import (
     apply_provider_plan_task,
     build_context_payload,
@@ -63,16 +64,21 @@ class DevAgentHttpHandler(SimpleHTTPRequestHandler):
                     home_dir=self.home_dir,
                     request_text=str(body.get("request", "")),
                     fake_response=str(body.get("fake_response", "")),
+                    preview_fingerprint=str(body.get("preview_fingerprint", "")),
                 )
                 self._send_json(HTTPStatus.OK, payload)
             elif path == "/":
                 self._send_static("index.html", "text/html; charset=utf-8")
             elif path == "/static/styles.css":
                 self._send_static("styles.css", "text/css; charset=utf-8")
+            elif path == "/static/diff-view.js":
+                self._send_static("diff-view.js", "text/javascript; charset=utf-8")
             elif path == "/static/app.js":
                 self._send_static("app.js", "text/javascript; charset=utf-8")
             else:
                 self._send_json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "not found"})
+        except StaleExecutionPreviewError as exc:
+            self._send_json(HTTPStatus.CONFLICT, {"ok": False, "error": str(exc)})
         except ValueError as exc:
             self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(exc)})
 

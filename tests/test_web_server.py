@@ -47,15 +47,20 @@ def get_text(url):
         return response.status, response.headers["Content-Type"], response.read().decode("utf-8")
 
 
-def provider_plan_payload(path="docs/from-web-route.md", content="来自 Web route\n"):
-    return {
+def provider_plan_payload(
+    path="docs/from-web-route.md",
+    content="来自 Web route\n",
+    action="create_text",
+    preview_fingerprint=None,
+):
+    payload = {
         "request": "Web provider route",
         "fake_response": json.dumps(
             {
                 "summary": "创建 Web route 文件",
                 "operations": [
                     {
-                        "action": "create_text",
+                        "action": action,
                         "path": path,
                         "content": content,
                     }
@@ -64,6 +69,9 @@ def provider_plan_payload(path="docs/from-web-route.md", content="来自 Web rou
             ensure_ascii=False,
         ),
     }
+    if preview_fingerprint is not None:
+        payload["preview_fingerprint"] = preview_fingerprint
+    return payload
 
 
 def test_health_route_returns_json(tmp_path) -> None:
@@ -191,6 +199,7 @@ def test_static_assets_include_console_interactions(tmp_path) -> None:
     try:
         index_status, index_type, index_body = get_text(f"{base_url}/")
         css_status, css_type, css_body = get_text(f"{base_url}/static/styles.css")
+        diff_js_status, diff_js_type, diff_js_body = get_text(f"{base_url}/static/diff-view.js")
         js_status, js_type, js_body = get_text(f"{base_url}/static/app.js")
     finally:
         server.shutdown()
@@ -211,7 +220,10 @@ def test_static_assets_include_console_interactions(tmp_path) -> None:
     assert "provider-plan-form" in index_body
     assert "confirm-provider-apply" in index_body
     assert "provider-preview-cards" in index_body
+    assert "provider-preview-diffs" in index_body
     assert "provider-audit-cards" in index_body
+    assert "provider-audit-diffs" in index_body
+    assert index_body.index('/static/diff-view.js') < index_body.index('/static/app.js')
     assert "原始 JSON" in index_body
     assert "执行结果 JSON" in index_body
     assert css_status == HTTPStatus.OK
@@ -234,6 +246,15 @@ def test_static_assets_include_console_interactions(tmp_path) -> None:
     assert ".audit-success" in css_body
     assert ".audit-failed" in css_body
     assert ".audit-diff" in css_body
+    assert ".diff-browser" in css_body
+    assert ".diff-file-navigation" in css_body
+    assert ".diff-file-button" in css_body
+    assert '.diff-file-button[aria-selected="true"]' in css_body
+    assert ".execution-diff" in css_body
+    assert ".diff-truncation-note" in css_body
+    mobile_block = css_body.split("@media (max-width: 860px)", maxsplit=1)[1]
+    mobile_approval_block = mobile_block.split(".approval-layout {", maxsplit=1)[1].split("}", maxsplit=1)[0]
+    assert "grid-template-columns: minmax(0, 1fr);" in mobile_approval_block
     assert ".history-card-list" in css_body
     assert ".history-card" in css_body
     assert ".history-status-badge" in css_body
@@ -251,6 +272,10 @@ def test_static_assets_include_console_interactions(tmp_path) -> None:
     assert ".context-copy-status" in css_body
     assert ".context-rule-detail" in css_body
     assert "overflow-wrap: anywhere" in css_body
+    assert diff_js_status == HTTPStatus.OK
+    assert diff_js_type == "text/javascript; charset=utf-8"
+    assert "renderExecutionDiffs" in diff_js_body
+    assert "textContent" in diff_js_body
     assert js_status == HTTPStatus.OK
     assert js_type == "text/javascript; charset=utf-8"
     assert "loadContext" in js_body
@@ -283,6 +308,10 @@ def test_static_assets_include_console_interactions(tmp_path) -> None:
     assert "需要重新预览" in js_body
     assert "/api/provider-plan/preview" in js_body
     assert "/api/provider-plan/apply" in js_body
+    assert "preview_fingerprint: lastProviderPreview.preview_fingerprint" in js_body
+    assert "providerPreviewDiffs" in js_body
+    assert "providerAuditDiffs" in js_body
+    assert "renderExecutionDiffs" in js_body
     assert "providerPreviewCards" in js_body
     assert "renderProviderPreviewCards" in js_body
     assert "clearProviderPreviewCards" in js_body
@@ -323,6 +352,23 @@ def test_web_context_card_javascript_behaviors() -> None:
     assert completed.returncode == 0, completed.stdout + completed.stderr
 
 
+def test_web_diff_view_javascript_behaviors() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Node.js is required for Web JavaScript behavior tests")
+
+    test_file = Path(__file__).with_name("web_diff_view.test.mjs")
+    completed = subprocess.run(
+        [node, "--test", str(test_file)],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+
+
 def test_provider_plan_preview_route_returns_preview_without_writing(tmp_path) -> None:
     write_text_utf8(tmp_path / "pyproject.toml", "[project]\nname = \"sample\"\n")
     server, base_url = start_server(tmp_path)
@@ -339,6 +385,8 @@ def test_provider_plan_preview_route_returns_preview_without_writing(tmp_path) -
     assert content_type == "application/json; charset=utf-8"
     assert payload["ok"] is True
     assert payload["preview_changes"][0]["path"] == "docs/from-web-route.md"
+    assert payload["file_diffs"][0]["path"] == "docs/from-web-route.md"
+    assert payload["preview_fingerprint"].startswith("sha256:")
     assert not (tmp_path / "docs" / "from-web-route.md").exists()
     assert not (tmp_path / ".agent").exists()
 
@@ -347,9 +395,16 @@ def test_provider_plan_apply_route_writes_file_and_records_history(tmp_path) -> 
     write_text_utf8(tmp_path / "pyproject.toml", "[project]\nname = \"sample\"\n")
     server, base_url = start_server(tmp_path)
     try:
+        plan_payload = provider_plan_payload(content="确认 route 写入\n")
+        preview_status, _preview_type, preview = post_json(
+            f"{base_url}/api/provider-plan/preview",
+            plan_payload,
+        )
+        assert preview_status == HTTPStatus.OK
+        plan_payload["preview_fingerprint"] = preview["preview_fingerprint"]
         status, content_type, payload = post_json(
             f"{base_url}/api/provider-plan/apply",
-            provider_plan_payload(content="确认 route 写入\n"),
+            plan_payload,
         )
     finally:
         server.shutdown()
@@ -367,6 +422,57 @@ def test_provider_plan_apply_route_writes_file_and_records_history(tmp_path) -> 
     assert (tmp_path / "docs" / "from-web-route.md").read_text(encoding="utf-8") == "确认 route 写入\n"
     history = (tmp_path / ".agent" / "history" / "tasks.jsonl").read_text(encoding="utf-8")
     assert "Web provider route" in history
+
+
+def test_provider_plan_apply_route_requires_preview_fingerprint(tmp_path) -> None:
+    server, base_url = start_server(tmp_path)
+    try:
+        status, content_type, payload = post_json(
+            f"{base_url}/api/provider-plan/apply",
+            provider_plan_payload(),
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert status == HTTPStatus.BAD_REQUEST
+    assert content_type == "application/json; charset=utf-8"
+    assert payload["ok"] is False
+    assert "preview_fingerprint is required" in payload["error"]
+    assert not (tmp_path / ".agent").exists()
+
+
+def test_provider_plan_apply_route_rejects_stale_preview_fingerprint(tmp_path) -> None:
+    write_text_utf8(tmp_path / "target.md", "版本一\n")
+    server, base_url = start_server(tmp_path)
+    try:
+        plan_payload = provider_plan_payload(
+            path="target.md",
+            content="批准内容\n",
+            action="overwrite_text",
+        )
+        preview_status, _preview_type, preview = post_json(
+            f"{base_url}/api/provider-plan/preview",
+            plan_payload,
+        )
+        assert preview_status == HTTPStatus.OK
+        write_text_utf8(tmp_path / "target.md", "版本二\n")
+        plan_payload["preview_fingerprint"] = preview["preview_fingerprint"]
+
+        status, content_type, payload = post_json(
+            f"{base_url}/api/provider-plan/apply",
+            plan_payload,
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert status == HTTPStatus.CONFLICT
+    assert content_type == "application/json; charset=utf-8"
+    assert payload["ok"] is False
+    assert "重新预览" in payload["error"]
+    assert (tmp_path / "target.md").read_text(encoding="utf-8") == "版本二\n"
+    assert not (tmp_path / ".agent").exists()
 
 
 def test_provider_plan_preview_route_rejects_bad_json(tmp_path) -> None:
@@ -409,7 +515,11 @@ def test_provider_plan_apply_route_rejects_bad_json_without_writing(tmp_path) ->
     try:
         status, content_type, payload = post_json(
             f"{base_url}/api/provider-plan/apply",
-            {"request": "坏 apply route", "fake_response": '{"summary":'},
+            {
+                "request": "坏 apply route",
+                "fake_response": '{"summary":',
+                "preview_fingerprint": "sha256:unused",
+            },
         )
     finally:
         server.shutdown()
@@ -428,7 +538,7 @@ def test_provider_plan_apply_route_rejects_create_conflict_without_writing(tmp_p
     try:
         status, content_type, payload = post_json(
             f"{base_url}/api/provider-plan/apply",
-            provider_plan_payload(),
+            provider_plan_payload(preview_fingerprint="sha256:unused"),
         )
     finally:
         server.shutdown()

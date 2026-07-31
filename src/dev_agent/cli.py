@@ -6,7 +6,7 @@ import sys
 from dev_agent import __version__
 from dev_agent.encoding import UTF8, read_text_utf8, utf8_environment_hint, write_text_utf8
 from dev_agent.execution.applier import ExecutionPlanApplier
-from dev_agent.execution.models import ExecutionPlan
+from dev_agent.execution.models import ExecutionPlan, ExecutionResult
 from dev_agent.execution.plan import ExecutionPlanError, parse_execution_plan
 from dev_agent.execution.provider_plan import parse_provider_execution_plan
 from dev_agent.memory.retriever import MemoryRetriever
@@ -108,13 +108,17 @@ def _resolve_execution_plan(args: Namespace) -> ExecutionPlan | None:
     return _load_execution_plan(args.plan_file)
 
 
-def _preview_execution_plan(execution_plan):
+def _preview_execution_plan(execution_plan) -> ExecutionResult:
     if execution_plan is None:
-        return []
-    return ExecutionPlanApplier(Path.cwd()).preview(execution_plan).preview_changes_as_dicts()
+        return ExecutionResult(applied=False, planned_changes=[])
+    return ExecutionPlanApplier(Path.cwd()).preview(execution_plan)
 
 
-def _preview_payload(args: Namespace, execution_plan, preview_changes: list[dict[str, object]]) -> dict[str, object]:
+def _preview_payload(
+    args: Namespace,
+    execution_plan,
+    preview_result: ExecutionResult,
+) -> dict[str, object]:
     planned_changes = [] if execution_plan is None else [operation.to_dict() for operation in execution_plan.operations]
     return {
         "task_id": None,
@@ -125,10 +129,12 @@ def _preview_payload(args: Namespace, execution_plan, preview_changes: list[dict
         "verification_passed": None,
         "events": ["execution_previewed"],
         "planned_changes": planned_changes,
-        "preview_changes": preview_changes,
+        "preview_changes": preview_result.preview_changes_as_dicts(),
         "applied_changes": [],
         "diff_stat": "",
         "execution_error": None,
+        "file_diffs": preview_result.file_diffs_as_dicts(),
+        "preview_fingerprint": preview_result.preview_fingerprint,
     }
 
 
@@ -157,12 +163,12 @@ def run_command(args: Namespace) -> int:
         sys.stderr.write(str(exc) + "\n")
         return 2
     try:
-        preview_changes = _preview_execution_plan(execution_plan)
+        preview_result = _preview_execution_plan(execution_plan)
     except ExecutionPlanError as exc:
         sys.stderr.write(f"执行计划预览失败：{exc}\n")
         return 2
     if execution_plan is not None and not args.apply:
-        sys.stdout.write(_json(_preview_payload(args, execution_plan, preview_changes)))
+        sys.stdout.write(_json(_preview_payload(args, execution_plan, preview_result)))
         return 0
     if not _confirm_apply(args):
         sys.stderr.write("应用执行计划需要确认；请传入 --yes 或在交互式终端输入 yes。\n")
@@ -179,6 +185,7 @@ def run_command(args: Namespace) -> int:
             run_verification=args.verify,
             apply_changes=args.apply,
             execution_plan=execution_plan,
+            expected_preview_fingerprint=preview_result.preview_fingerprint or None,
         ),
     )
     payload = {
@@ -190,10 +197,12 @@ def run_command(args: Namespace) -> int:
         "verification_passed": None if result.verification_result is None else result.verification_result.passed,
         "events": result.events,
         "planned_changes": result.planned_changes,
-        "preview_changes": preview_changes,
+        "preview_changes": preview_result.preview_changes_as_dicts(),
         "applied_changes": result.applied_changes,
         "diff_stat": result.diff_stat,
         "execution_error": result.execution_error,
+        "file_diffs": result.file_diffs,
+        "preview_fingerprint": result.preview_fingerprint,
     }
     sys.stdout.write(_json(payload))
     return 1 if result.execution_error else 0
