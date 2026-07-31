@@ -252,6 +252,9 @@ def test_static_assets_include_console_interactions(tmp_path) -> None:
     assert '.diff-file-button[aria-selected="true"]' in css_body
     assert ".execution-diff" in css_body
     assert ".diff-truncation-note" in css_body
+    mobile_block = css_body.split("@media (max-width: 860px)", maxsplit=1)[1]
+    mobile_approval_block = mobile_block.split(".approval-layout {", maxsplit=1)[1].split("}", maxsplit=1)[0]
+    assert "grid-template-columns: minmax(0, 1fr);" in mobile_approval_block
     assert ".history-card-list" in css_body
     assert ".history-card" in css_body
     assert ".history-status-badge" in css_body
