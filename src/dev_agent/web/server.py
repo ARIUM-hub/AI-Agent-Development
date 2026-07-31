@@ -71,6 +71,8 @@ class DevAgentHttpHandler(SimpleHTTPRequestHandler):
                 self._send_static("index.html", "text/html; charset=utf-8")
             elif path == "/static/styles.css":
                 self._send_static("styles.css", "text/css; charset=utf-8")
+            elif path == "/static/diff-view.js":
+                self._send_static("diff-view.js", "text/javascript; charset=utf-8")
             elif path == "/static/app.js":
                 self._send_static("app.js", "text/javascript; charset=utf-8")
             else:

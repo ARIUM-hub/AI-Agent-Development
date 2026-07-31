@@ -199,6 +199,7 @@ def test_static_assets_include_console_interactions(tmp_path) -> None:
     try:
         index_status, index_type, index_body = get_text(f"{base_url}/")
         css_status, css_type, css_body = get_text(f"{base_url}/static/styles.css")
+        diff_js_status, diff_js_type, diff_js_body = get_text(f"{base_url}/static/diff-view.js")
         js_status, js_type, js_body = get_text(f"{base_url}/static/app.js")
     finally:
         server.shutdown()
@@ -219,7 +220,10 @@ def test_static_assets_include_console_interactions(tmp_path) -> None:
     assert "provider-plan-form" in index_body
     assert "confirm-provider-apply" in index_body
     assert "provider-preview-cards" in index_body
+    assert "provider-preview-diffs" in index_body
     assert "provider-audit-cards" in index_body
+    assert "provider-audit-diffs" in index_body
+    assert index_body.index('/static/diff-view.js') < index_body.index('/static/app.js')
     assert "原始 JSON" in index_body
     assert "执行结果 JSON" in index_body
     assert css_status == HTTPStatus.OK
@@ -242,6 +246,12 @@ def test_static_assets_include_console_interactions(tmp_path) -> None:
     assert ".audit-success" in css_body
     assert ".audit-failed" in css_body
     assert ".audit-diff" in css_body
+    assert ".diff-browser" in css_body
+    assert ".diff-file-navigation" in css_body
+    assert ".diff-file-button" in css_body
+    assert '.diff-file-button[aria-selected="true"]' in css_body
+    assert ".execution-diff" in css_body
+    assert ".diff-truncation-note" in css_body
     assert ".history-card-list" in css_body
     assert ".history-card" in css_body
     assert ".history-status-badge" in css_body
@@ -259,6 +269,10 @@ def test_static_assets_include_console_interactions(tmp_path) -> None:
     assert ".context-copy-status" in css_body
     assert ".context-rule-detail" in css_body
     assert "overflow-wrap: anywhere" in css_body
+    assert diff_js_status == HTTPStatus.OK
+    assert diff_js_type == "text/javascript; charset=utf-8"
+    assert "renderExecutionDiffs" in diff_js_body
+    assert "textContent" in diff_js_body
     assert js_status == HTTPStatus.OK
     assert js_type == "text/javascript; charset=utf-8"
     assert "loadContext" in js_body
@@ -291,6 +305,10 @@ def test_static_assets_include_console_interactions(tmp_path) -> None:
     assert "需要重新预览" in js_body
     assert "/api/provider-plan/preview" in js_body
     assert "/api/provider-plan/apply" in js_body
+    assert "preview_fingerprint: lastProviderPreview.preview_fingerprint" in js_body
+    assert "providerPreviewDiffs" in js_body
+    assert "providerAuditDiffs" in js_body
+    assert "renderExecutionDiffs" in js_body
     assert "providerPreviewCards" in js_body
     assert "renderProviderPreviewCards" in js_body
     assert "clearProviderPreviewCards" in js_body
@@ -320,6 +338,23 @@ def test_web_context_card_javascript_behaviors() -> None:
         pytest.skip("Node.js is required for Web JavaScript behavior tests")
 
     test_file = Path(__file__).with_name("web_context_cards.test.mjs")
+    completed = subprocess.run(
+        [node, "--test", str(test_file)],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+
+
+def test_web_diff_view_javascript_behaviors() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Node.js is required for Web JavaScript behavior tests")
+
+    test_file = Path(__file__).with_name("web_diff_view.test.mjs")
     completed = subprocess.run(
         [node, "--test", str(test_file)],
         check=False,
