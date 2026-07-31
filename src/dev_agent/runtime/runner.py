@@ -27,8 +27,13 @@ class LocalTaskRunner:
         task = create_task(self.repo_root, user_request)
         task = update_task_status(self.repo_root, task.task_id, TaskStatus.RUNNING, "runtime_started")
         context = resolve_runtime_context(self.repo_root, self.home_dir, user_request)
-        prompt = build_task_prompt(context)
-        response = self.provider.complete(ModelRequest(prompt=prompt, task_id=task.task_id))
+        if options.prepared_response is None:
+            prompt = build_task_prompt(context)
+            response = self.provider.complete(
+                ModelRequest(prompt=prompt, task_id=task.task_id)
+            )
+        else:
+            response = options.prepared_response
         task = update_task_status(self.repo_root, task.task_id, TaskStatus.RUNNING, "provider_completed")
         events = [*task.events]
         verification_result = None
@@ -64,6 +69,9 @@ class LocalTaskRunner:
                 dry_run=options.dry_run,
                 memory_hit_count=len(context.memory_hits),
                 verification_steps=[step.command for step in context.verification_plan.steps],
+                provider=response.provider,
+                model=options.provider_model,
+                provider_usage=response.usage,
                 events=task.events,
                 planned_changes=execution_result.planned_changes,
                 applied_changes=execution_result.changes_as_dicts(),
@@ -93,6 +101,9 @@ class LocalTaskRunner:
             dry_run=options.dry_run,
             memory_hit_count=len(context.memory_hits),
             verification_steps=[step.command for step in context.verification_plan.steps],
+            provider=response.provider,
+            model=options.provider_model,
+            provider_usage=response.usage,
             verification_result=verification_result,
             events=task.events,
             planned_changes=execution_result.planned_changes,

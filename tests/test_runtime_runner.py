@@ -1,10 +1,14 @@
+from pathlib import Path
+
 from dev_agent.config.models import ProjectConfig, UserPreferences
 from dev_agent.encoding import write_text_utf8
+from dev_agent.execution.applier import ExecutionPlanApplier
 from dev_agent.execution.models import ExecutionOperation, ExecutionPlan
 from dev_agent.memory.store import MemoryStore
 from dev_agent.memory.models import MemoryHit
 from dev_agent.project.scanner import ProjectScan
 from dev_agent.providers.base import FakeProvider
+from dev_agent.providers.models import ModelResponse, ProviderUsage
 from dev_agent.runtime.models import RuntimeContext
 from dev_agent.runtime.models import TaskRunOptions
 from dev_agent.runtime.prompts import build_task_prompt
@@ -140,3 +144,84 @@ def test_local_task_runner_records_execution_failure_without_writing_later_opera
     history = MemoryStore(tmp_path).list_tasks()
     assert history[-1].status == "failed"
     assert "already exists" in history[-1].summary
+
+
+class FailingProvider:
+    name = "must-not-run"
+
+    def complete(self, request):
+        raise AssertionError("prepared apply must not call provider")
+
+
+def prepared_response() -> ModelResponse:
+    return ModelResponse(
+        provider="openai-compatible",
+        text='{"summary":"创建说明","operations":[]}',
+        usage=ProviderUsage(request_count=1, input_chars=120, output_chars=80),
+    )
+
+
+def test_local_task_runner_reuses_prepared_response_without_provider_call(
+    tmp_path: Path,
+) -> None:
+    plan = ExecutionPlan(
+        summary="创建说明",
+        operations=[
+            ExecutionOperation(
+                "create_text",
+                "docs/reused.md",
+                "复用响应\n",
+            )
+        ],
+    )
+    preview = ExecutionPlanApplier(tmp_path).preview(plan)
+    runner = LocalTaskRunner(tmp_path, tmp_path, FailingProvider())
+
+    result = runner.run(
+        "创建说明",
+        TaskRunOptions(
+            apply_changes=True,
+            execution_plan=plan,
+            expected_preview_fingerprint=preview.preview_fingerprint,
+            prepared_response=prepared_response(),
+            provider_model="model-name",
+        ),
+    )
+
+    assert (
+        tmp_path / "docs" / "reused.md"
+    ).read_text(encoding="utf-8") == "复用响应\n"
+    assert result.provider == "openai-compatible"
+    assert result.model == "model-name"
+    assert result.provider_usage == ProviderUsage(1, 120, 80)
+    assert "provider_completed" in result.events
+
+
+def test_prepared_response_keeps_stale_preview_protection(tmp_path: Path) -> None:
+    write_text_utf8(tmp_path / "README.md", "before\n")
+    plan = ExecutionPlan(
+        "覆盖",
+        [ExecutionOperation("overwrite_text", "README.md", "after\n")],
+    )
+    fingerprint = ExecutionPlanApplier(tmp_path).preview(plan).preview_fingerprint
+    write_text_utf8(tmp_path / "README.md", "changed after preview\n")
+    runner = LocalTaskRunner(tmp_path, tmp_path, FailingProvider())
+
+    result = runner.run(
+        "覆盖 README",
+        TaskRunOptions(
+            apply_changes=True,
+            execution_plan=plan,
+            expected_preview_fingerprint=fingerprint,
+            prepared_response=prepared_response(),
+            provider_model="model-name",
+        ),
+    )
+
+    assert "文件状态已变化" in (result.execution_error or "")
+    assert (tmp_path / "README.md").read_text(encoding="utf-8") == (
+        "changed after preview\n"
+    )
+    assert result.provider == "openai-compatible"
+    assert result.provider_usage.request_count == 1
+    assert MemoryStore(tmp_path).list_tasks()[-1].status == "failed"
