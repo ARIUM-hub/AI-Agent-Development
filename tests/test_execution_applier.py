@@ -3,7 +3,13 @@ import pytest
 from dev_agent.encoding import read_text_utf8, write_text_utf8
 from dev_agent.execution.applier import ExecutionPlanApplier
 from dev_agent.execution.models import ExecutionFileDiff, ExecutionOperation, ExecutionPlan, ExecutionResult
-from dev_agent.execution.plan import ExecutionPlanError
+from dev_agent.execution.plan import ExecutionPlanError, StaleExecutionPreviewError
+
+
+def apply_plan(repo_root, plan: ExecutionPlan):
+    applier = ExecutionPlanApplier(repo_root)
+    preview = applier.preview(plan)
+    return applier.apply(plan, expected_fingerprint=preview.preview_fingerprint)
 
 
 def test_execution_result_serializes_file_diffs() -> None:
@@ -32,6 +38,37 @@ def test_execution_result_serializes_file_diffs() -> None:
     assert result.preview_fingerprint == "sha256:abc"
 
 
+def test_applier_returns_approved_diffs_after_apply(tmp_path) -> None:
+    plan = ExecutionPlan(
+        summary="创建文件",
+        operations=[ExecutionOperation("create_text", "docs/new.md", "新内容\n")],
+    )
+    applier = ExecutionPlanApplier(tmp_path)
+    preview = applier.preview(plan)
+
+    result = applier.apply(plan, expected_fingerprint=preview.preview_fingerprint)
+
+    assert result.file_diffs_as_dicts() == preview.file_diffs_as_dicts()
+    assert result.preview_fingerprint == preview.preview_fingerprint
+    assert read_text_utf8(tmp_path / "docs" / "new.md") == "新内容\n"
+
+
+def test_applier_rejects_stale_fingerprint_before_writing(tmp_path) -> None:
+    write_text_utf8(tmp_path / "target.md", "版本一\n")
+    plan = ExecutionPlan(
+        summary="覆盖文件",
+        operations=[ExecutionOperation("overwrite_text", "target.md", "批准内容\n")],
+    )
+    applier = ExecutionPlanApplier(tmp_path)
+    preview = applier.preview(plan)
+    write_text_utf8(tmp_path / "target.md", "版本二\n")
+
+    with pytest.raises(StaleExecutionPreviewError, match="重新预览"):
+        applier.apply(plan, expected_fingerprint=preview.preview_fingerprint)
+
+    assert read_text_utf8(tmp_path / "target.md") == "版本二\n"
+
+
 def test_applier_creates_overwrites_and_appends_utf8_text(tmp_path) -> None:
     write_text_utf8(tmp_path / "existing.md", "旧内容\n")
     plan = ExecutionPlan(
@@ -43,7 +80,7 @@ def test_applier_creates_overwrites_and_appends_utf8_text(tmp_path) -> None:
         ],
     )
 
-    result = ExecutionPlanApplier(tmp_path).apply(plan)
+    result = apply_plan(tmp_path, plan)
 
     assert result.applied is True
     assert [change.path for change in result.changes] == ["docs/new.md", "existing.md", "logs/run.md"]
@@ -60,7 +97,7 @@ def test_applier_rejects_create_when_file_exists(tmp_path) -> None:
     )
 
     with pytest.raises(ExecutionPlanError, match="already exists"):
-        ExecutionPlanApplier(tmp_path).apply(plan)
+        apply_plan(tmp_path, plan)
 
     assert read_text_utf8(tmp_path / "README.md") == "# existing\n"
 
@@ -85,7 +122,7 @@ def test_applier_rejects_unsafe_paths(tmp_path, unsafe_path: str) -> None:
     )
 
     with pytest.raises(ExecutionPlanError):
-        ExecutionPlanApplier(tmp_path).apply(plan)
+        apply_plan(tmp_path, plan)
 
 
 def test_applier_validates_all_operations_before_writing(tmp_path) -> None:
@@ -99,7 +136,7 @@ def test_applier_validates_all_operations_before_writing(tmp_path) -> None:
     )
 
     with pytest.raises(ExecutionPlanError, match="already exists"):
-        ExecutionPlanApplier(tmp_path).apply(plan)
+        apply_plan(tmp_path, plan)
 
     assert not (tmp_path / "docs" / "first.md").exists()
     assert read_text_utf8(tmp_path / "README.md") == "# existing\n"
@@ -249,7 +286,7 @@ def test_applier_rejects_create_after_planned_write_creates_same_target(tmp_path
     with pytest.raises(ExecutionPlanError, match="already exists"):
         ExecutionPlanApplier(tmp_path).preview(plan)
     with pytest.raises(ExecutionPlanError, match="already exists"):
-        ExecutionPlanApplier(tmp_path).apply(plan)
+        apply_plan(tmp_path, plan)
 
     assert not (tmp_path / "docs" / "same.md").exists()
 
@@ -265,7 +302,7 @@ def test_applier_rejects_parent_path_that_is_file_before_writing(tmp_path) -> No
     )
 
     with pytest.raises(ExecutionPlanError, match="parent path is not a directory"):
-        ExecutionPlanApplier(tmp_path).apply(plan)
+        apply_plan(tmp_path, plan)
 
     assert not (tmp_path / "docs" / "first.md").exists()
     assert read_text_utf8(tmp_path / "blocker") == "not a directory\n"

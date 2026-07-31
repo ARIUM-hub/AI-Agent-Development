@@ -5,6 +5,10 @@ class ExecutionPlanError(ValueError):
     pass
 
 
+class StaleExecutionPreviewError(ExecutionPlanError):
+    pass
+
+
 def parse_execution_plan(data: dict[str, object]) -> ExecutionPlan:
     if not isinstance(data, dict):
         raise ExecutionPlanError("execution plan must be a JSON object")
