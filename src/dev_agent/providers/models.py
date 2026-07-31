@@ -5,6 +5,7 @@ from dataclasses import dataclass
 class ModelRequest:
     prompt: str
     task_id: str | None = None
+    system_prompt: str | None = None
 
 
 @dataclass(frozen=True)
