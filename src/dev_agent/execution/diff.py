@@ -4,7 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from dev_agent.encoding import UTF8, read_text_utf8
+from dev_agent.encoding import UTF8
 from dev_agent.execution.models import ExecutionFileDiff, ExecutionPlan
 from dev_agent.execution.plan import ExecutionPlanError
 from dev_agent.execution.validation import ExecutionPlanValidator
@@ -42,7 +42,12 @@ class ExecutionPlanDiffer:
             item = by_target.get(target)
             if item is None:
                 before_exists = target.exists()
-                before_content = read_text_utf8(target) if before_exists else ""
+                try:
+                    before_content = target.read_bytes().decode(UTF8) if before_exists else ""
+                except UnicodeDecodeError as exc:
+                    raise ExecutionPlanError(
+                        f"文件不是有效 UTF-8：{operation.path}"
+                    ) from exc
                 item = _SimulatedFile(
                     raw_path=operation.path,
                     target=target,
@@ -66,16 +71,12 @@ class ExecutionPlanDiffer:
         else:
             old_label = f"a/{item.raw_path}" if item.before_exists else "/dev/null"
             new_label = f"b/{item.raw_path}"
-            lines = list(
-                unified_diff(
-                    item.before_content.splitlines(),
-                    item.after_content.splitlines(),
-                    fromfile=old_label,
-                    tofile=new_label,
-                    lineterm="",
-                )
+            full_diff = self._render_unified_diff(
+                item.before_content,
+                item.after_content,
+                old_label,
+                new_label,
             )
-            full_diff = "\n".join(lines) + ("\n" if lines else "")
         additions = sum(
             1
             for line in full_diff.splitlines()
@@ -89,20 +90,55 @@ class ExecutionPlanDiffer:
         status = "added" if not item.before_exists else "modified"
         if item.before_content == item.after_content:
             status = "unchanged"
+        full_lines = full_diff.splitlines(keepends=True)
+        line_limited = "".join(full_lines[:DIFF_MAX_LINES])
+        display_text = line_limited[:DIFF_MAX_CHARS]
         return ExecutionFileDiff(
             path=item.raw_path,
             status=status,
-            diff_text=full_diff,
+            diff_text=display_text,
             additions=additions,
             deletions=deletions,
             diff_line_count=len(full_diff.splitlines()),
             diff_char_count=len(full_diff),
-            displayed_line_count=len(full_diff.splitlines()),
-            displayed_char_count=len(full_diff),
-            truncated=False,
+            displayed_line_count=len(display_text.splitlines()),
+            displayed_char_count=len(display_text),
+            truncated=display_text != full_diff,
             before_line_ending=self._line_ending(item.before_content),
             after_line_ending=self._line_ending(item.after_content),
         )
+
+    def _render_unified_diff(
+        self,
+        before_content: str,
+        after_content: str,
+        old_label: str,
+        new_label: str,
+    ) -> str:
+        raw_lines = unified_diff(
+            before_content.splitlines(keepends=True),
+            after_content.splitlines(keepends=True),
+            fromfile=old_label,
+            tofile=new_label,
+            lineterm="\n",
+        )
+        rendered: list[str] = []
+        for line in raw_lines:
+            is_body_line = (
+                line.startswith(("+", "-", " "))
+                and not line.startswith(("+++", "---"))
+            )
+            if line.endswith("\r\n"):
+                rendered.append(line[:-2] + "\n")
+            elif line.endswith("\n"):
+                rendered.append(line)
+            elif line.endswith("\r"):
+                rendered.append(line[:-1] + "\n")
+            else:
+                rendered.append(line + "\n")
+                if is_body_line:
+                    rendered.append("\\ No newline at end of file\n")
+        return "".join(rendered)
 
     def _line_ending(self, text: str) -> str:
         without_crlf = text.replace("\r\n", "")
