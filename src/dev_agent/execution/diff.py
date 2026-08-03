@@ -5,8 +5,9 @@ import json
 from pathlib import Path
 
 from dev_agent.encoding import UTF8
-from dev_agent.execution.models import ExecutionFileDiff, ExecutionPlan
+from dev_agent.execution.models import ExecutionFileDiff, ExecutionOperation, ExecutionPlan
 from dev_agent.execution.plan import ExecutionPlanError
+from dev_agent.execution.text_operations import apply_replace_text
 from dev_agent.execution.validation import ExecutionPlanValidator
 
 
@@ -19,8 +20,15 @@ class _SimulatedFile:
     raw_path: str
     target: Path
     before_exists: bool
+    after_exists: bool
     before_content: str
     after_content: str
+
+
+def _operation_content(operation: ExecutionOperation) -> str:
+    if not isinstance(operation.content, str):
+        raise ExecutionPlanError(f"content must be a string: {operation.path}")
+    return operation.content
 
 
 class ExecutionPlanDiffer:
@@ -52,15 +60,24 @@ class ExecutionPlanDiffer:
                     raw_path=operation.path,
                     target=target,
                     before_exists=before_exists,
+                    after_exists=before_exists,
                     before_content=before_content,
                     after_content=before_content,
                 )
                 by_target[target] = item
                 ordered.append(item)
             if operation.action in {"create_text", "overwrite_text"}:
-                item.after_content = operation.content
+                item.after_content = _operation_content(operation)
+                item.after_exists = True
             elif operation.action == "append_text":
-                item.after_content += operation.content
+                item.after_content += _operation_content(operation)
+                item.after_exists = True
+            elif operation.action == "replace_text":
+                item.after_content = apply_replace_text(
+                    operation,
+                    item.after_content,
+                    item.after_exists,
+                )
             else:
                 raise ExecutionPlanError(f"unsupported action: {operation.action}")
         return ordered

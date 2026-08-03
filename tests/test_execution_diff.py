@@ -13,6 +13,15 @@ def build_diff(tmp_path, operations):
     return ExecutionPlanDiffer(tmp_path, validator).build(plan)
 
 
+def replace(path: str, old_text: str, new_text: str) -> ExecutionOperation:
+    return ExecutionOperation(
+        action="replace_text",
+        path=path,
+        old_text=old_text,
+        new_text=new_text,
+    )
+
+
 def test_diff_builder_renders_added_utf8_file_without_writing(tmp_path) -> None:
     file_diffs, fingerprint = build_diff(
         tmp_path,
@@ -123,3 +132,62 @@ def test_diff_fingerprint_changes_with_plan_or_file_state(tmp_path) -> None:
     assert same == first
     assert changed_file != first
     assert changed_plan != changed_file
+
+
+def test_diff_builder_applies_consecutive_replacements_to_simulated_content(
+    tmp_path,
+) -> None:
+    write_text_utf8(tmp_path / "notes.md", "甲乙丙\n")
+
+    file_diffs, _fingerprint = build_diff(
+        tmp_path,
+        [replace("notes.md", "甲乙", "甲丁"), replace("notes.md", "丁丙", "戊丙")],
+    )
+
+    assert len(file_diffs) == 1
+    assert "-甲乙丙" in file_diffs[0].diff_text
+    assert "+甲戊丙" in file_diffs[0].diff_text
+    assert (tmp_path / "notes.md").read_text(encoding="utf-8") == "甲乙丙\n"
+
+
+def test_diff_builder_mixes_create_append_and_replace_in_order(tmp_path) -> None:
+    file_diffs, _fingerprint = build_diff(
+        tmp_path,
+        [
+            ExecutionOperation("create_text", "new.md", "开始\n"),
+            ExecutionOperation("append_text", "new.md", "旧结尾\n"),
+            replace("new.md", "旧结尾", "新结尾"),
+        ],
+    )
+
+    assert "+新结尾" in file_diffs[0].diff_text
+    assert "旧结尾" not in file_diffs[0].diff_text
+    assert not (tmp_path / "new.md").exists()
+
+
+def test_diff_builder_rejects_later_replace_without_writing(tmp_path) -> None:
+    write_text_utf8(tmp_path / "target.md", "第一处\n")
+
+    with pytest.raises(ExecutionPlanError, match="实际 0 处"):
+        build_diff(
+            tmp_path,
+            [
+                replace("target.md", "第一处", "已替换"),
+                replace("target.md", "不存在", "不会执行"),
+            ],
+        )
+
+    assert (tmp_path / "target.md").read_text(encoding="utf-8") == "第一处\n"
+
+
+def test_diff_fingerprint_changes_with_replace_fragments(tmp_path) -> None:
+    write_text_utf8(tmp_path / "state.md", "旧值\n")
+    _diffs, first = build_diff(tmp_path, [replace("state.md", "旧值", "新值")])
+    _diffs, changed_old = build_diff(tmp_path, [replace("state.md", "旧", "新值")])
+    _diffs, changed_new = build_diff(
+        tmp_path,
+        [replace("state.md", "旧值", "另一个值")],
+    )
+
+    assert first != changed_old
+    assert first != changed_new
