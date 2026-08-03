@@ -735,6 +735,56 @@ def test_run_defaults_to_fake_and_requires_fake_response(tmp_path: Path) -> None
     assert "fake 模式必须传入 --fake-response" in result.stderr
 
 
+def test_fake_provider_rejects_context_file_before_reading_it(tmp_path: Path) -> None:
+    result = run_cli(
+        tmp_path,
+        "run",
+        "离线请求",
+        "--fake-response",
+        "离线计划",
+        "--context-file",
+        "missing.py",
+    )
+
+    assert result.returncode == 2
+    assert "--context-file 只能用于 openai-compatible" in result.stderr
+    assert "missing.py" not in result.stderr
+
+
+def test_fake_run_outputs_stable_null_source_context(tmp_path: Path) -> None:
+    result = run_cli(
+        tmp_path,
+        "run",
+        "离线请求",
+        "--fake-response",
+        "离线计划",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["source_context"] is None
+
+
+def test_context_validation_precedes_provider_config(tmp_path: Path) -> None:
+    path = tmp_path / "src" / "new.py"
+    path.parent.mkdir(parents=True)
+    path.write_text("print('new')\n", encoding="utf-8")
+
+    result = run_cli(
+        tmp_path,
+        "run",
+        "请求",
+        "--provider",
+        "openai-compatible",
+        "--context-file",
+        "src/new.py",
+        home=tmp_path / "missing-home",
+    )
+
+    assert result.returncode == 2
+    assert "Git" in result.stderr
+    assert "Provider 配置文件不存在" not in result.stderr
+
+
 @pytest.mark.parametrize(
     "conflicting_args",
     [
@@ -788,6 +838,7 @@ def test_openai_compatible_preview_requests_once_and_does_not_write(
     assert payload["preview_changes"][0]["path"] == "docs/cli-provider.md"
     assert payload["file_diffs"][0]["status"] == "added"
     assert payload["task_id"] is None
+    assert payload["source_context"] is None
     assert server.request_count == 1
     assert server.requests[0]["path"] == "/v1/chat/completions"
     assert server.requests[0]["authorization"] == "Bearer cli-secret-key"
