@@ -505,6 +505,9 @@ const providerRiskLabel = (risk) => {
   if (risk === "overwrite") {
     return "覆盖";
   }
+  if (risk === "replace") {
+    return "替换";
+  }
   if (risk === "append") {
     return "追加";
   }
@@ -520,6 +523,9 @@ const providerRiskClass = (risk) => {
   }
   if (risk === "overwrite") {
     return "risk-overwrite";
+  }
+  if (risk === "replace") {
+    return "risk-replace";
   }
   if (risk === "append") {
     return "risk-append";

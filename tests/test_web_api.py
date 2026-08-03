@@ -126,6 +126,27 @@ def provider_plan_json(path: str = "docs/from-web-provider.md", content: str = "
     )
 
 
+def replace_provider_plan_json(
+    path: str = "target.md",
+    old_text: str = "旧值",
+    new_text: str = "新值",
+) -> str:
+    return json.dumps(
+        {
+            "summary": "替换",
+            "operations": [
+                {
+                    "action": "replace_text",
+                    "path": path,
+                    "old_text": old_text,
+                    "new_text": new_text,
+                }
+            ],
+        },
+        ensure_ascii=False,
+    )
+
+
 def test_preview_provider_plan_task_returns_preview_without_side_effects(tmp_path) -> None:
     write_text_utf8(tmp_path / "pyproject.toml", "[project]\nname = \"sample\"\n")
 
@@ -271,3 +292,45 @@ def test_apply_provider_plan_task_requires_fresh_fingerprint(tmp_path) -> None:
 
     assert (tmp_path / "target.md").read_text(encoding="utf-8") == "版本二\n"
     assert not (tmp_path / ".agent").exists()
+
+
+def test_web_fake_previews_and_applies_replace(tmp_path) -> None:
+    write_text_utf8(tmp_path / "target.md", "旧值\n")
+    response = replace_provider_plan_json()
+
+    preview = preview_provider_plan_task(tmp_path, "替换", response)
+    applied = apply_provider_plan_task(
+        tmp_path,
+        tmp_path,
+        "替换",
+        response,
+        preview["preview_fingerprint"],
+    )
+
+    assert preview["planned_changes"][0]["old_text"] == "旧值"
+    assert preview["preview_changes"][0]["risk"] == "replace"
+    assert preview["preview_changes"][0]["content_preview"] == "新值"
+    assert applied["applied_changes"][0]["bytes_written"] == len(
+        "新值".encode("utf-8")
+    )
+    assert (tmp_path / "target.md").read_text(encoding="utf-8") == "新值\n"
+
+
+def test_web_fake_replace_rejects_stale_fingerprint(tmp_path) -> None:
+    write_text_utf8(tmp_path / "target.md", "旧值\n")
+    response = replace_provider_plan_json()
+    preview = preview_provider_plan_task(tmp_path, "替换", response)
+    write_text_utf8(tmp_path / "target.md", "旧值\n预览后变化\n")
+
+    with pytest.raises(StaleExecutionPreviewError, match="重新预览"):
+        apply_provider_plan_task(
+            tmp_path,
+            tmp_path,
+            "替换",
+            response,
+            preview["preview_fingerprint"],
+        )
+
+    assert (tmp_path / "target.md").read_text(encoding="utf-8") == (
+        "旧值\n预览后变化\n"
+    )
