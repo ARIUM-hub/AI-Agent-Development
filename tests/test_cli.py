@@ -10,6 +10,8 @@ import threading
 
 import pytest
 
+from dev_agent.encoding import write_text_utf8
+
 
 def run_cli(
     repo: Path,
@@ -135,6 +137,20 @@ def strict_cli_plan() -> str:
         ensure_ascii=False,
         separators=(",", ":"),
     )
+
+
+def replace_plan(path: str, old_text: str, new_text: str) -> dict[str, object]:
+    return {
+        "summary": "局部替换",
+        "operations": [
+            {
+                "action": "replace_text",
+                "path": path,
+                "old_text": old_text,
+                "new_text": new_text,
+            }
+        ],
+    }
 
 
 def init_cli_git_repo(repo: Path) -> None:
@@ -1179,3 +1195,165 @@ def test_openai_context_path_failures_make_zero_http_requests(
     assert expected_error in result.stderr
     assert server.request_count == 0
     assert "cli-secret-key" not in result.stderr
+
+
+def test_fake_provider_plan_previews_and_applies_replace(tmp_path: Path) -> None:
+    write_text_utf8(tmp_path / "target.md", "旧值\n")
+    response = json.dumps(
+        replace_plan("target.md", "旧值", "新值"),
+        ensure_ascii=False,
+    )
+
+    preview = run_cli(
+        tmp_path,
+        "run",
+        "替换",
+        "--fake-response",
+        response,
+        "--use-provider-plan",
+    )
+    applied = run_cli(
+        tmp_path,
+        "run",
+        "替换",
+        "--fake-response",
+        response,
+        "--use-provider-plan",
+        "--apply",
+        "--yes",
+    )
+
+    preview_payload = json.loads(preview.stdout)
+    applied_payload = json.loads(applied.stdout)
+    assert preview.returncode == 0
+    assert preview_payload["planned_changes"][0]["old_text"] == "旧值"
+    assert preview_payload["preview_changes"][0]["risk"] == "replace"
+    assert applied.returncode == 0
+    assert applied_payload["applied_changes"][0]["action"] == "replace_text"
+    assert (tmp_path / "target.md").read_text(encoding="utf-8") == "新值\n"
+
+
+def test_plan_file_previews_and_applies_replace(tmp_path: Path) -> None:
+    write_text_utf8(tmp_path / "target.md", "旧值\n")
+    plan_file = tmp_path / "replace-plan.json"
+    write_text_utf8(
+        plan_file,
+        json.dumps(replace_plan("target.md", "旧值", "新值"), ensure_ascii=False),
+    )
+
+    preview = run_cli(
+        tmp_path,
+        "run",
+        "替换",
+        "--fake-response",
+        "说明",
+        "--plan-file",
+        str(plan_file),
+    )
+    applied = run_cli(
+        tmp_path,
+        "run",
+        "替换",
+        "--fake-response",
+        "说明",
+        "--plan-file",
+        str(plan_file),
+        "--apply",
+        "--yes",
+    )
+
+    assert preview.returncode == 0
+    assert json.loads(preview.stdout)["preview_changes"][0]["risk"] == "replace"
+    assert applied.returncode == 0
+    assert (tmp_path / "target.md").read_text(encoding="utf-8") == "新值\n"
+
+
+def test_openai_context_replace_apply_requests_once_and_redacts_history(
+    tmp_path: Path,
+    provider_server_factory: Callable[[str], CliProviderServer],
+) -> None:
+    repo = tmp_path / "repo"
+    home = tmp_path / "home"
+    repo.mkdir()
+    home.mkdir()
+    init_cli_git_repo(repo)
+    track_cli_file(repo, "src/app.py", "OLD_CONTEXT_MARKER\n".encode("utf-8"))
+    response = json.dumps(
+        replace_plan("src/app.py", "OLD_CONTEXT_MARKER", "NEW_CONTEXT_MARKER"),
+        ensure_ascii=False,
+    )
+    server = provider_server_factory(response)
+    write_provider_config(home, server.base_url)
+
+    result = run_cli(
+        repo,
+        "run",
+        "替换上下文",
+        "--provider",
+        "openai-compatible",
+        "--context-file",
+        "src/app.py",
+        "--apply",
+        "--yes",
+        home=home,
+        extra_env={"DEV_AGENT_API_KEY": "cli-secret-key"},
+    )
+
+    payload = json.loads(result.stdout)
+    history = (repo / ".agent" / "history" / "tasks.jsonl").read_text(
+        encoding="utf-8"
+    )
+    assert result.returncode == 0
+    assert server.request_count == 1
+    assert payload["plan_text"] == response
+    assert payload["planned_changes"][0]["old_text"] == "OLD_CONTEXT_MARKER"
+    assert payload["preview_changes"][0]["risk"] == "replace"
+    assert (repo / "src" / "app.py").read_text(encoding="utf-8") == (
+        "NEW_CONTEXT_MARKER\n"
+    )
+    assert "OLD_CONTEXT_MARKER" not in history
+    assert "NEW_CONTEXT_MARKER" not in history
+    assert "sha256:" in history
+
+
+def test_openai_context_replace_rejects_unselected_target_once(
+    tmp_path: Path,
+    provider_server_factory: Callable[[str], CliProviderServer],
+) -> None:
+    repo = tmp_path / "repo"
+    home = tmp_path / "home"
+    repo.mkdir()
+    home.mkdir()
+    init_cli_git_repo(repo)
+    track_cli_file(repo, "src/app.py", b"OLD_UNSELECTED_MARKER\n")
+    track_cli_file(repo, "src/selected.py", b"SELECTED_CONTEXT\n")
+    response = json.dumps(
+        replace_plan(
+            "src/app.py",
+            "OLD_UNSELECTED_MARKER",
+            "NEW_UNSELECTED_MARKER",
+        ),
+        ensure_ascii=False,
+    )
+    server = provider_server_factory(response)
+    write_provider_config(home, server.base_url)
+
+    result = run_cli(
+        repo,
+        "run",
+        "越权替换",
+        "--provider",
+        "openai-compatible",
+        "--context-file",
+        "src/selected.py",
+        "--apply",
+        "--yes",
+        home=home,
+        extra_env={"DEV_AGENT_API_KEY": "cli-secret-key"},
+    )
+
+    assert result.returncode == 2
+    assert "未包含在源码上下文" in result.stderr
+    assert server.request_count == 1
+    assert (repo / "src" / "app.py").read_bytes() == b"OLD_UNSELECTED_MARKER\n"
+    assert not (repo / ".agent").exists()
