@@ -43,3 +43,33 @@ def test_parse_provider_execution_plan_rejects_invalid_provider_text(text: str) 
 def test_parse_provider_execution_plan_requires_exact_fields(text: str) -> None:
     with pytest.raises(ExecutionPlanError, match="无法解析 provider 执行计划"):
         parse_provider_execution_plan(text)
+
+
+def test_parse_provider_execution_plan_accepts_replace_schema() -> None:
+    plan = parse_provider_execution_plan(
+        '{"summary":"替换","operations":[{"action":"replace_text",'
+        '"path":"src/app.py","old_text":"旧","new_text":"新"}]}'
+    )
+
+    assert plan.operations[0].to_dict() == {
+        "action": "replace_text",
+        "path": "src/app.py",
+        "old_text": "旧",
+        "new_text": "新",
+    }
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        '{"summary":"错字段","operations":[{"action":"replace_text","path":"a.py","content":"x"}]}',
+        '{"summary":"混入 content","operations":[{"action":"replace_text","path":"a.py","old_text":"a","new_text":"b","content":"x"}]}',
+        '{"summary":"现有动作混入 old","operations":[{"action":"append_text","path":"a.py","content":"x","old_text":"a"}]}',
+        '{"summary":"额外字段","operations":[{"action":"replace_text","path":"a.py","old_text":"a","new_text":"b","mode":"unsafe"}]}',
+    ],
+)
+def test_parse_provider_execution_plan_rejects_action_specific_field_mismatch(
+    text: str,
+) -> None:
+    with pytest.raises(ExecutionPlanError, match="无法解析 provider 执行计划"):
+        parse_provider_execution_plan(text)

@@ -27,13 +27,38 @@ def _parse_operation(data: object) -> ExecutionOperation:
         raise ExecutionPlanError("operation must be an object")
     action = data.get("action")
     path = data.get("path")
-    content = data.get("content")
     if not isinstance(action, str):
         raise ExecutionPlanError("action must be a string")
     if action not in SUPPORTED_ACTIONS:
         raise ExecutionPlanError(f"unsupported action: {action}")
     if not isinstance(path, str):
         raise ExecutionPlanError("path must be a string")
+    if action == "replace_text":
+        return _parse_replace_operation(data, path)
+    content = data.get("content")
     if not isinstance(content, str):
         raise ExecutionPlanError("content must be a string")
     return ExecutionOperation(action=action, path=path, content=content)
+
+
+def _parse_replace_operation(
+    data: dict[str, object],
+    path: str,
+) -> ExecutionOperation:
+    expected = {"action", "path", "old_text", "new_text"}
+    if set(data) != expected:
+        raise ExecutionPlanError(
+            "replace_text fields must be exactly action, path, old_text and new_text"
+        )
+    old_text = data.get("old_text")
+    new_text = data.get("new_text")
+    if not isinstance(old_text, str):
+        raise ExecutionPlanError("old_text must be a string")
+    if not isinstance(new_text, str):
+        raise ExecutionPlanError("new_text must be a string")
+    return ExecutionOperation(
+        action="replace_text",
+        path=path,
+        old_text=old_text,
+        new_text=new_text,
+    )

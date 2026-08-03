@@ -16,13 +16,16 @@ def parse_provider_execution_plan(text: str) -> ExecutionPlan:
         operations = data["operations"]
         if isinstance(operations, list):
             for operation in operations:
-                if isinstance(operation, dict) and set(operation) != {
-                    "action",
-                    "path",
-                    "content",
-                }:
+                if not isinstance(operation, dict):
+                    continue
+                expected = (
+                    {"action", "path", "old_text", "new_text"}
+                    if operation.get("action") == "replace_text"
+                    else {"action", "path", "content"}
+                )
+                if set(operation) != expected:
                     raise ExecutionPlanError(
-                        "provider operation fields must be exactly action, path and content"
+                        "provider operation fields do not match its action schema"
                     )
         return parse_execution_plan(data)
     except (json.JSONDecodeError, ExecutionPlanError) as exc:
