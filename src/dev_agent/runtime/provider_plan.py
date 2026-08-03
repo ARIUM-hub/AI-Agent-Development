@@ -3,7 +3,9 @@ from pathlib import Path
 
 from dev_agent.execution.applier import ExecutionPlanApplier
 from dev_agent.execution.models import ExecutionPlan, ExecutionResult
+from dev_agent.execution.plan import ExecutionPlanError
 from dev_agent.execution.provider_plan import parse_provider_execution_plan
+from dev_agent.execution.validation import ExecutionPlanValidator
 from dev_agent.providers.base import ModelProvider
 from dev_agent.providers.budget import (
     BudgetConfig,
@@ -27,6 +29,27 @@ class ProviderPlanPreparation:
     execution_plan: ExecutionPlan
     preview_result: ExecutionResult
     source_context: SourceContextBundle | None
+
+
+def _validate_replace_source_context(
+    repo_root: Path,
+    plan: ExecutionPlan,
+    source_context: SourceContextBundle | None,
+) -> None:
+    validator = ExecutionPlanValidator(repo_root)
+    authorized = {
+        item.path.replace("\\", "/").casefold()
+        for item in (() if source_context is None else source_context.files)
+    }
+    for operation in plan.operations:
+        if operation.action != "replace_text":
+            continue
+        target = validator.resolve_target(operation.path)
+        normalized = target.relative_to(validator.repo_root).as_posix()
+        if normalized.casefold() not in authorized:
+            raise ExecutionPlanError(
+                f"replace_text 目标未包含在源码上下文：{normalized}"
+            )
 
 
 def prepare_provider_execution_plan(
@@ -56,6 +79,7 @@ def prepare_provider_execution_plan(
         )
     )
     execution_plan = parse_provider_execution_plan(response.text)
+    _validate_replace_source_context(repo_root, execution_plan, source_context)
     preview_result = ExecutionPlanApplier(repo_root).preview(execution_plan)
     return ProviderPlanPreparation(
         provider_name=response.provider,
