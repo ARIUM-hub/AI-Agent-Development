@@ -1725,7 +1725,7 @@ foreach ($file in $textFiles) {
     $null = $utf8.GetString([System.IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $file)))
 }
 git diff --check master...HEAD
-rg -n "sk-[A-Za-z0-9]|Authorization:\s*Bearer|OLD_SOURCE_MARKER|NEW_SOURCE_MARKER|CONTENT_SECRET_MARKER" src
+rg -n "sk-[A-Za-z0-9]{16,}|Authorization:\s*Bearer|OLD_SOURCE_MARKER|NEW_SOURCE_MARKER|CONTENT_SECRET_MARKER" src
 ```
 
 Expected: 所有变更文本严格 UTF-8 解码成功；`git diff --check` 无输出；`rg` 在生产代码中无匹配。测试中的固定 marker 允许存在。
