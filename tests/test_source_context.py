@@ -120,6 +120,16 @@ def test_rejects_non_relative_or_parent_paths(tmp_path: Path, raw_path: str) -> 
         build_source_context(tmp_path, [raw_path])
 
 
+def test_absolute_path_error_does_not_leak_repo_root(tmp_path: Path) -> None:
+    init_repo(tmp_path)
+    absolute_path = str((tmp_path / "src" / "code.py").resolve())
+
+    with pytest.raises(SourceContextError) as captured:
+        build_source_context(tmp_path, [absolute_path])
+
+    assert str(tmp_path.resolve()) not in str(captured.value)
+
+
 @pytest.mark.parametrize(
     "raw_path",
     [
@@ -326,3 +336,22 @@ def test_git_failure_happens_before_content_read(
         build_source_context(tmp_path, ["src/code.py"])
 
     assert read_calls == 0
+
+
+def test_git_utf8_decode_failure_is_reported_as_source_context_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    init_repo(tmp_path)
+    track_bytes(tmp_path, "src/code.py", b"print('ok')\n")
+
+    def fail_decode(*_args: object, **_kwargs: object) -> CommandResult:
+        raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
+
+    monkeypatch.setattr(
+        "dev_agent.runtime.source_context.CommandExecutor.run",
+        fail_decode,
+    )
+
+    with pytest.raises(SourceContextError, match="无法使用 Git 校验源码上下文"):
+        build_source_context(tmp_path, ["src/code.py"])

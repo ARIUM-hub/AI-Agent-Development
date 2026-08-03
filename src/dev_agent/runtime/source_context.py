@@ -3,6 +3,7 @@ from fnmatch import fnmatchcase
 from hashlib import sha256
 from pathlib import Path, PureWindowsPath
 import stat
+from subprocess import SubprocessError
 
 from dev_agent.tools.executor import CommandExecutor
 
@@ -84,8 +85,12 @@ def _normalize_paths(
     seen: set[str] = set()
     for raw_path in raw_paths:
         windows_path = PureWindowsPath(raw_path)
-        if not raw_path.strip() or windows_path.anchor or windows_path.drive:
+        if not raw_path.strip():
             raise _path_error(raw_path)
+        if windows_path.anchor or windows_path.drive:
+            raise SourceContextError(
+                "源码文件路径不允许：必须使用仓库相对路径"
+            )
         if any(part == ".." for part in windows_path.parts):
             raise _path_error(raw_path)
         parts = tuple(part for part in windows_path.parts if part not in {"", "."})
@@ -145,7 +150,10 @@ def _tracked_regular_files(repo_root: Path, paths: list[str]) -> set[str]:
         "--",
         *[f":(literal){path}" for path in paths],
     ]
-    result = CommandExecutor(repo_root).run(command)
+    try:
+        result = CommandExecutor(repo_root).run(command)
+    except (OSError, SubprocessError, UnicodeError):
+        raise SourceContextError("无法使用 Git 校验源码上下文") from None
     if result.exit_code != 0:
         raise SourceContextError("无法使用 Git 校验源码上下文")
     entries: dict[str, list[str]] = {}
