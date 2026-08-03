@@ -16,6 +16,7 @@ from dev_agent.runtime.prompts import (
     STRICT_EXECUTION_PLAN_SYSTEM_PROMPT,
     build_provider_plan_prompt,
 )
+from dev_agent.runtime.source_context import SourceContextBundle
 
 
 @dataclass(frozen=True)
@@ -25,6 +26,7 @@ class ProviderPlanPreparation:
     response: ModelResponse
     execution_plan: ExecutionPlan
     preview_result: ExecutionResult
+    source_context: SourceContextBundle | None
 
 
 def prepare_provider_execution_plan(
@@ -33,9 +35,10 @@ def prepare_provider_execution_plan(
     user_request: str,
     provider: ModelProvider,
     model: str,
+    source_context: SourceContextBundle | None = None,
 ) -> ProviderPlanPreparation:
     context = resolve_runtime_context(repo_root, home_dir, user_request)
-    prompt = build_provider_plan_prompt(context)
+    prompt = build_provider_plan_prompt(context, source_context)
     protected = ProtectedProvider(
         provider,
         CircuitBreaker(
@@ -60,4 +63,5 @@ def prepare_provider_execution_plan(
         response=response,
         execution_plan=execution_plan,
         preview_result=preview_result,
+        source_context=source_context,
     )

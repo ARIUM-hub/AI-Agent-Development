@@ -29,6 +29,11 @@ from dev_agent.runtime.provider_plan import (
     prepare_provider_execution_plan,
 )
 from dev_agent.runtime.runner import LocalTaskRunner
+from dev_agent.runtime.source_context import (
+    SourceContextBundle,
+    SourceContextError,
+    build_source_context,
+)
 from dev_agent.web.server import create_server
 
 
@@ -149,6 +154,7 @@ def _preview_payload(
         "execution_error": None,
         "file_diffs": preview_result.file_diffs_as_dicts(),
         "preview_fingerprint": preview_result.preview_fingerprint,
+        "source_context": None,
         **_provider_metadata("fake", None, None),
     }
 
@@ -163,6 +169,14 @@ def _provider_metadata(
         "model": model,
         "provider_usage": None if usage is None else asdict(usage),
     }
+
+
+def _source_context_metadata(
+    source_context: SourceContextBundle | None,
+) -> dict[str, object] | None:
+    if source_context is None:
+        return None
+    return source_context.to_metadata()
 
 
 def _prepared_preview_payload(
@@ -187,6 +201,7 @@ def _prepared_preview_payload(
         "execution_error": None,
         "file_diffs": preview.file_diffs_as_dicts(),
         "preview_fingerprint": preview.preview_fingerprint,
+        "source_context": _source_context_metadata(prepared.source_context),
         **_provider_metadata(
             prepared.provider_name,
             prepared.model,
@@ -209,6 +224,8 @@ def _confirm_apply(args: Namespace) -> bool:
 
 def _validate_run_arguments(args: Namespace) -> None:
     if args.provider == "fake":
+        if args.context_file:
+            raise ValueError("--context-file 只能用于 openai-compatible")
         if args.fake_response is None:
             raise ValueError("fake 模式必须传入 --fake-response")
         if args.apply and args.plan_file is None and not args.use_provider_plan:
@@ -232,6 +249,7 @@ def _validate_run_arguments(args: Namespace) -> None:
 def _result_payload(
     result,
     preview_result: ExecutionResult,
+    source_context: SourceContextBundle | None = None,
 ) -> dict[str, object]:
     return {
         "task_id": result.task_id,
@@ -252,6 +270,7 @@ def _result_payload(
         "execution_error": result.execution_error,
         "file_diffs": result.file_diffs,
         "preview_fingerprint": result.preview_fingerprint,
+        "source_context": _source_context_metadata(source_context),
         **_provider_metadata(
             result.provider,
             result.model,
@@ -302,6 +321,11 @@ def _run_fake_command(args: Namespace) -> int:
 
 def _run_openai_compatible_command(args: Namespace) -> int:
     try:
+        source_context = (
+            build_source_context(Path.cwd(), args.context_file)
+            if args.context_file
+            else None
+        )
         config = load_openai_compatible_config(Path.home())
         api_key = resolve_openai_compatible_api_key(config, os.environ)
         provider = OpenAICompatibleProvider(config, api_key)
@@ -311,8 +335,10 @@ def _run_openai_compatible_command(args: Namespace) -> int:
             user_request=args.request,
             provider=provider,
             model=config.model,
+            source_context=source_context,
         )
     except (
+        SourceContextError,
         ProviderConfigError,
         ProviderError,
         BudgetExceeded,
@@ -347,7 +373,15 @@ def _run_openai_compatible_command(args: Namespace) -> int:
             provider_model=prepared.model,
         ),
     )
-    sys.stdout.write(_json(_result_payload(result, prepared.preview_result)))
+    sys.stdout.write(
+        _json(
+            _result_payload(
+                result,
+                prepared.preview_result,
+                prepared.source_context,
+            )
+        )
+    )
     return 1 if result.execution_error else 0
 
 
@@ -415,6 +449,7 @@ def build_parser() -> ArgumentParser:
         default="fake",
     )
     run_parser.add_argument("--fake-response")
+    run_parser.add_argument("--context-file", action="append", default=[])
     run_parser.add_argument("--dry-run", action="store_true", default=True)
     run_parser.add_argument("--verify", action="store_true")
     run_parser.add_argument("--plan-file")
