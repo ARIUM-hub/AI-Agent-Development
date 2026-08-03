@@ -176,19 +176,31 @@ def build_source_context(
     files: list[SourceContextFile] = []
     total_bytes = 0
     for item in normalized:
-        raw = item.absolute_path.read_bytes()
+        try:
+            raw = item.absolute_path.read_bytes()
+        except OSError:
+            raise SourceContextError(f"无法读取源码文件：{item.path}") from None
+        file_bytes = len(raw)
+        if file_bytes > MAX_SOURCE_FILE_BYTES:
+            raise SourceContextError(
+                f"源码文件超过 {MAX_SOURCE_FILE_BYTES} 字节：{item.path}"
+            )
+        total_bytes += file_bytes
+        if total_bytes > MAX_SOURCE_CONTEXT_BYTES:
+            raise SourceContextError(
+                f"源码上下文超过 {MAX_SOURCE_CONTEXT_BYTES} 字节"
+            )
         try:
             content = raw.decode("utf-8-sig")
         except UnicodeDecodeError:
             raise SourceContextError(
                 f"源码文件不是有效的 UTF-8：{item.path}"
             ) from None
-        total_bytes += len(raw)
         files.append(
             SourceContextFile(
                 path=item.path,
                 content=content,
-                utf8_bytes=len(raw),
+                utf8_bytes=file_bytes,
                 sha256=f"sha256:{sha256(raw).hexdigest()}",
             )
         )

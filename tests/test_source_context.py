@@ -8,6 +8,7 @@ from dev_agent.runtime.source_context import (
     SourceContextError,
     build_source_context,
 )
+from dev_agent.tools.executor import CommandResult
 
 
 def git(repo: Path, *args: str, input_text: str | None = None) -> str:
@@ -226,3 +227,102 @@ def test_rejects_symlink_and_submodule_index_modes(
         match="源码文件不是 Git 已跟踪的普通文件：special",
     ):
         build_source_context(tmp_path, ["special"])
+
+
+def test_accepts_exact_file_count_and_byte_limits(tmp_path: Path) -> None:
+    init_repo(tmp_path)
+    paths: list[str] = []
+    for index in range(10):
+        relative_path = f"src/file-{index}.txt"
+        track_bytes(tmp_path, relative_path, b"x" * (10 * 1024))
+        paths.append(relative_path)
+
+    bundle = build_source_context(tmp_path, paths)
+
+    assert len(bundle.files) == 10
+    assert bundle.total_bytes == 100 * 1024
+
+
+def test_accepts_exact_single_file_limit(tmp_path: Path) -> None:
+    init_repo(tmp_path)
+    track_bytes(tmp_path, "src/exact.txt", b"x" * (40 * 1024))
+
+    bundle = build_source_context(tmp_path, ["src/exact.txt"])
+
+    assert bundle.total_bytes == 40 * 1024
+
+
+def test_rejects_eleventh_file_before_git_or_content_read(tmp_path: Path) -> None:
+    init_repo(tmp_path)
+
+    with pytest.raises(SourceContextError, match="源码上下文最多允许 10 个文件"):
+        build_source_context(tmp_path, [f"src/{index}.py" for index in range(11)])
+
+
+def test_rejects_single_file_one_byte_over_limit(tmp_path: Path) -> None:
+    init_repo(tmp_path)
+    track_bytes(tmp_path, "src/large.txt", b"x" * (40 * 1024 + 1))
+
+    with pytest.raises(
+        SourceContextError,
+        match="源码文件超过 40960 字节：src/large.txt",
+    ):
+        build_source_context(tmp_path, ["src/large.txt"])
+
+
+def test_rejects_total_one_byte_over_limit(tmp_path: Path) -> None:
+    init_repo(tmp_path)
+    track_bytes(tmp_path, "src/first.txt", b"x" * (40 * 1024))
+    track_bytes(tmp_path, "src/second.txt", b"y" * (40 * 1024))
+    track_bytes(tmp_path, "src/third.txt", b"z" * (20 * 1024 + 1))
+
+    with pytest.raises(SourceContextError, match="源码上下文超过 102400 字节"):
+        build_source_context(
+            tmp_path,
+            ["src/first.txt", "src/second.txt", "src/third.txt"],
+        )
+
+
+def test_rejects_non_utf8_bytes(tmp_path: Path) -> None:
+    init_repo(tmp_path)
+    track_bytes(tmp_path, "src/data.bin", b"\xff\xfe\x00")
+
+    with pytest.raises(
+        SourceContextError,
+        match="源码文件不是有效的 UTF-8：src/data.bin",
+    ):
+        build_source_context(tmp_path, ["src/data.bin"])
+
+
+def test_git_failure_happens_before_content_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "src" / "code.py"
+    path.parent.mkdir(parents=True)
+    path.write_text("must not be read\n", encoding="utf-8")
+    read_calls = 0
+    original_read_bytes = Path.read_bytes
+
+    def fail_git(*_args: object, **_kwargs: object) -> CommandResult:
+        return CommandResult(
+            command=["git"],
+            cwd=tmp_path,
+            exit_code=128,
+            stdout="",
+            stderr="not a repository",
+            duration_ms=1,
+        )
+
+    def count_read_bytes(self: Path) -> bytes:
+        nonlocal read_calls
+        read_calls += 1
+        return original_read_bytes(self)
+
+    monkeypatch.setattr("dev_agent.runtime.source_context.CommandExecutor.run", fail_git)
+    monkeypatch.setattr(Path, "read_bytes", count_read_bytes)
+
+    with pytest.raises(SourceContextError, match="无法使用 Git 校验源码上下文"):
+        build_source_context(tmp_path, ["src/code.py"])
+
+    assert read_calls == 0
