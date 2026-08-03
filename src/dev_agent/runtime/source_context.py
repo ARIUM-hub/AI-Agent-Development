@@ -1,6 +1,8 @@
 from dataclasses import dataclass
+from fnmatch import fnmatchcase
 from hashlib import sha256
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
+import stat
 
 from dev_agent.tools.executor import CommandExecutor
 
@@ -42,12 +44,94 @@ class SourceContextBundle:
         }
 
 
-def _normalize_paths(repo_root: Path, raw_paths: list[str]) -> list[tuple[str, Path]]:
-    normalized: list[tuple[str, Path]] = []
+FORBIDDEN_SOURCE_DIRECTORIES = frozenset(
+    {".git", ".agent", ".worktrees", ".superpowers"}
+)
+SENSITIVE_SOURCE_BASENAME_PATTERNS = (
+    ".env",
+    ".env.*",
+    "credentials*",
+    "secrets*",
+    "id_rsa",
+    "id_ed25519",
+    "*.pem",
+    "*.key",
+    "*.p12",
+    "*.pfx",
+)
+
+
+@dataclass(frozen=True)
+class _NormalizedSourcePath:
+    path: str
+    absolute_path: Path
+
+
+def _path_error(raw_path: str) -> SourceContextError:
+    return SourceContextError(f"源码文件路径不允许：{raw_path}")
+
+
+def _normalize_paths(
+    repo_root: Path,
+    raw_paths: list[str],
+) -> list[_NormalizedSourcePath]:
+    if len(raw_paths) > MAX_SOURCE_CONTEXT_FILES:
+        raise SourceContextError(
+            f"源码上下文最多允许 {MAX_SOURCE_CONTEXT_FILES} 个文件"
+        )
+    root = repo_root.resolve()
+    normalized: list[_NormalizedSourcePath] = []
+    seen: set[str] = set()
     for raw_path in raw_paths:
-        path = Path(raw_path)
-        relative_path = path.as_posix()
-        normalized.append((relative_path, repo_root / path))
+        windows_path = PureWindowsPath(raw_path)
+        if not raw_path.strip() or windows_path.anchor or windows_path.drive:
+            raise _path_error(raw_path)
+        if any(part == ".." for part in windows_path.parts):
+            raise _path_error(raw_path)
+        parts = tuple(part for part in windows_path.parts if part not in {"", "."})
+        if not parts:
+            raise _path_error(raw_path)
+        folded_parts = tuple(part.casefold() for part in parts)
+        if any(part in FORBIDDEN_SOURCE_DIRECTORIES for part in folded_parts):
+            raise _path_error(raw_path)
+        basename = folded_parts[-1]
+        if any(
+            fnmatchcase(basename, pattern)
+            for pattern in SENSITIVE_SOURCE_BASENAME_PATTERNS
+        ):
+            raise _path_error(raw_path)
+        relative_path = "/".join(parts)
+        duplicate_key = relative_path.casefold()
+        if duplicate_key in seen:
+            raise SourceContextError(f"源码文件路径重复：{relative_path}")
+        seen.add(duplicate_key)
+        absolute_path = root.joinpath(*parts)
+        current = root
+        for part in parts:
+            current = current / part
+            if current.is_symlink():
+                raise _path_error(relative_path)
+        resolved = absolute_path.resolve(strict=False)
+        try:
+            resolved.relative_to(root)
+        except ValueError:
+            raise _path_error(relative_path) from None
+        if not absolute_path.exists() or not absolute_path.is_file():
+            raise SourceContextError(f"源码文件不是普通文件：{relative_path}")
+        try:
+            mode = absolute_path.stat().st_mode
+        except OSError:
+            raise SourceContextError(
+                f"无法读取源码文件状态：{relative_path}"
+            ) from None
+        if not stat.S_ISREG(mode):
+            raise SourceContextError(f"源码文件不是普通文件：{relative_path}")
+        normalized.append(
+            _NormalizedSourcePath(
+                path=relative_path,
+                absolute_path=absolute_path,
+            )
+        )
     return normalized
 
 
@@ -88,21 +172,21 @@ def build_source_context(
     raw_paths: list[str],
 ) -> SourceContextBundle:
     normalized = _normalize_paths(repo_root, raw_paths)
-    _tracked_regular_files(repo_root, [path for path, _absolute in normalized])
+    _tracked_regular_files(repo_root, [item.path for item in normalized])
     files: list[SourceContextFile] = []
     total_bytes = 0
-    for relative_path, absolute_path in normalized:
-        raw = absolute_path.read_bytes()
+    for item in normalized:
+        raw = item.absolute_path.read_bytes()
         try:
             content = raw.decode("utf-8-sig")
         except UnicodeDecodeError:
             raise SourceContextError(
-                f"源码文件不是有效的 UTF-8：{relative_path}"
+                f"源码文件不是有效的 UTF-8：{item.path}"
             ) from None
         total_bytes += len(raw)
         files.append(
             SourceContextFile(
-                path=relative_path,
+                path=item.path,
                 content=content,
                 utf8_bytes=len(raw),
                 sha256=f"sha256:{sha256(raw).hexdigest()}",
