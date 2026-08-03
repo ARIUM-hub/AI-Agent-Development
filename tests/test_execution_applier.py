@@ -12,6 +12,15 @@ def apply_plan(repo_root, plan: ExecutionPlan):
     return applier.apply(plan, expected_fingerprint=preview.preview_fingerprint)
 
 
+def replace(path: str, old_text: str, new_text: str) -> ExecutionOperation:
+    return ExecutionOperation(
+        action="replace_text",
+        path=path,
+        old_text=old_text,
+        new_text=new_text,
+    )
+
+
 def test_execution_result_serializes_file_diffs() -> None:
     file_diff = ExecutionFileDiff(
         path="docs/example.md",
@@ -306,3 +315,96 @@ def test_applier_rejects_parent_path_that_is_file_before_writing(tmp_path) -> No
 
     assert not (tmp_path / "docs" / "first.md").exists()
     assert read_text_utf8(tmp_path / "blocker") == "not a directory\n"
+
+
+def test_applier_previews_and_applies_replace_metadata(tmp_path) -> None:
+    write_text_utf8(tmp_path / "target.md", "旧内容\n")
+    plan = ExecutionPlan("替换", [replace("target.md", "旧内容", "新内容")])
+    applier = ExecutionPlanApplier(tmp_path)
+
+    preview = applier.preview(plan)
+    result = applier.apply(plan, expected_fingerprint=preview.preview_fingerprint)
+
+    assert preview.preview_changes_as_dicts() == [
+        {
+            "action": "replace_text",
+            "path": "target.md",
+            "exists": True,
+            "content_bytes": len("新内容".encode("utf-8")),
+            "risk": "replace",
+            "content_preview": "新内容",
+            "content_preview_truncated": False,
+            "content_preview_line_count": 1,
+            "content_preview_char_count": len("新内容"),
+        }
+    ]
+    assert result.changes_as_dicts() == [
+        {
+            "action": "replace_text",
+            "path": "target.md",
+            "before_exists": True,
+            "after_exists": True,
+            "bytes_written": len("新内容".encode("utf-8")),
+        }
+    ]
+    assert (tmp_path / "target.md").read_bytes() == "新内容\n".encode("utf-8")
+
+
+@pytest.mark.parametrize(
+    ("original", "old_text", "new_text", "expected"),
+    [
+        (
+            b"\xef\xbb\xbfhead\r\nold\r\ntail",
+            "old",
+            "new",
+            b"\xef\xbb\xbfhead\r\nnew\r\ntail",
+        ),
+        (b"head\nold\ntail\n", "old", "new", b"head\nnew\ntail\n"),
+        (b"head\r\nold\ntail\r", "old", "new", b"head\r\nnew\ntail\r"),
+        (b"head-old-tail", "old", "", b"head--tail"),
+    ],
+)
+def test_applier_replace_preserves_unmodified_utf8_bytes(
+    tmp_path,
+    original: bytes,
+    old_text: str,
+    new_text: str,
+    expected: bytes,
+) -> None:
+    target = tmp_path / "bytes.txt"
+    target.write_bytes(original)
+
+    apply_plan(
+        tmp_path,
+        ExecutionPlan("字节保真", [replace("bytes.txt", old_text, new_text)]),
+    )
+
+    assert target.read_bytes() == expected
+
+
+def test_applier_prevalidates_all_replacements_before_any_write(tmp_path) -> None:
+    write_text_utf8(tmp_path / "target.md", "第一处\n")
+    plan = ExecutionPlan(
+        "原子预校验",
+        [
+            replace("target.md", "第一处", "已替换"),
+            replace("target.md", "缺失", "不会执行"),
+        ],
+    )
+
+    with pytest.raises(ExecutionPlanError, match="实际 0 处"):
+        apply_plan(tmp_path, plan)
+
+    assert (tmp_path / "target.md").read_text(encoding="utf-8") == "第一处\n"
+
+
+def test_applier_replace_rejects_non_utf8_without_writing(tmp_path) -> None:
+    target = tmp_path / "legacy.txt"
+    original = b"\xff\xfe\x00"
+    target.write_bytes(original)
+    plan = ExecutionPlan("拒绝非 UTF-8", [replace("legacy.txt", "旧", "新")])
+
+    with pytest.raises(ExecutionPlanError, match="不是有效 UTF-8"):
+        apply_plan(tmp_path, plan)
+
+    assert target.read_bytes() == original
