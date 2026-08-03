@@ -34,6 +34,11 @@ class LocalTaskRunner:
             )
         else:
             response = options.prepared_response
+        history_plan_text = (
+            response.text
+            if options.history_plan_text is None
+            else options.history_plan_text
+        )
         task = update_task_status(self.repo_root, task.task_id, TaskStatus.RUNNING, "provider_completed")
         events = [*task.events]
         verification_result = None
@@ -59,7 +64,7 @@ class LocalTaskRunner:
                 task_id=task.task_id,
                 title=user_request,
                 status=task.status.value,
-                summary=f"{response.text}\n\n执行失败：{execution_error}",
+                summary=f"{history_plan_text}\n\n执行失败：{execution_error}",
                 events=task.events,
                 verification=[" ".join(step.command) for step in context.verification_plan.steps],
             )
@@ -86,7 +91,7 @@ class LocalTaskRunner:
             events = [*task.events]
         final_status = TaskStatus.PASSED if verification_result is None or verification_result.passed else TaskStatus.FAILED
         task = update_task_status(self.repo_root, task.task_id, final_status, "runtime_completed")
-        summary = self._build_summary(response.text, execution_result)
+        summary = self._build_summary(history_plan_text, execution_result)
         self._record_history(
             task_id=task.task_id,
             title=user_request,

@@ -15,7 +15,10 @@ from dev_agent.encoding import UTF8, read_text_utf8, utf8_environment_hint, writ
 from dev_agent.execution.applier import ExecutionPlanApplier
 from dev_agent.execution.models import ExecutionPlan, ExecutionResult
 from dev_agent.execution.plan import ExecutionPlanError, parse_execution_plan
-from dev_agent.execution.provider_plan import parse_provider_execution_plan
+from dev_agent.execution.provider_plan import (
+    build_execution_plan_history_text,
+    parse_provider_execution_plan,
+)
 from dev_agent.memory.retriever import MemoryRetriever
 from dev_agent.memory.store import MemoryStore
 from dev_agent.project.scanner import scan_project
@@ -371,6 +374,9 @@ def _run_openai_compatible_command(args: Namespace) -> int:
             ),
             prepared_response=prepared.response,
             provider_model=prepared.model,
+            history_plan_text=build_execution_plan_history_text(
+                prepared.execution_plan
+            ),
         ),
     )
     sys.stdout.write(

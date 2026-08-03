@@ -585,6 +585,11 @@ button:disabled {
   background: rgba(255, 244, 232, 0.86);
 }
 
+.preview-card.risk-replace {
+  border-color: rgba(177, 137, 48, 0.42);
+  background: rgba(255, 249, 222, 0.82);
+}
+
 .preview-card.risk-append,
 .preview-card.risk-append-create {
   border-color: rgba(64, 112, 111, 0.34);
@@ -625,6 +630,11 @@ button:disabled {
 .risk-badge.risk-overwrite {
   color: #8b3f1e;
   background: rgba(255, 232, 211, 0.95);
+}
+
+.risk-badge.risk-replace {
+  color: #725312;
+  background: rgba(255, 243, 190, 0.94);
 }
 
 .risk-badge.risk-append,
@@ -702,6 +712,11 @@ button:disabled {
 .audit-card.risk-overwrite {
   border-color: rgba(201, 112, 74, 0.46);
   background: rgba(255, 244, 232, 0.84);
+}
+
+.audit-card.risk-replace {
+  border-color: rgba(177, 137, 48, 0.42);
+  background: rgba(255, 249, 222, 0.82);
 }
 
 .audit-card.risk-append,

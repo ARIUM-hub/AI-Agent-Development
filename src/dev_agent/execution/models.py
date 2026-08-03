@@ -1,17 +1,30 @@
 from dataclasses import asdict, dataclass, field
 
 
-SUPPORTED_ACTIONS = {"create_text", "overwrite_text", "append_text"}
+SUPPORTED_ACTIONS = {"create_text", "overwrite_text", "append_text", "replace_text"}
 
 
 @dataclass(frozen=True)
 class ExecutionOperation:
     action: str
     path: str
-    content: str
+    content: str | None = None
+    old_text: str | None = None
+    new_text: str | None = None
 
     def to_dict(self) -> dict[str, object]:
-        return asdict(self)
+        if self.action == "replace_text":
+            return {
+                "action": self.action,
+                "path": self.path,
+                "old_text": self.old_text,
+                "new_text": self.new_text,
+            }
+        return {
+            "action": self.action,
+            "path": self.path,
+            "content": self.content,
+        }
 
 
 @dataclass(frozen=True)

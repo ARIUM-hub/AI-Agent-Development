@@ -31,6 +31,7 @@ class TaskRunOptions:
     expected_preview_fingerprint: str | None = None
     prepared_response: ModelResponse | None = None
     provider_model: str | None = None
+    history_plan_text: str | None = None
 
 
 @dataclass(frozen=True)

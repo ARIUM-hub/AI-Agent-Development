@@ -225,3 +225,87 @@ def test_prepared_response_keeps_stale_preview_protection(tmp_path: Path) -> Non
     assert result.provider == "openai-compatible"
     assert result.provider_usage.request_count == 1
     assert MemoryStore(tmp_path).list_tasks()[-1].status == "failed"
+
+
+def test_runner_uses_history_plan_text_but_returns_original_response(
+    tmp_path: Path,
+) -> None:
+    write_text_utf8(tmp_path / "target.md", "OLD_SOURCE_MARKER\n")
+    response = ModelResponse(
+        provider="openai-compatible",
+        text="RAW_PROVIDER_BODY_MARKER",
+        usage=ProviderUsage(1, 10, 10),
+    )
+    plan = ExecutionPlan(
+        "替换",
+        [
+            ExecutionOperation(
+                action="replace_text",
+                path="target.md",
+                old_text="OLD_SOURCE_MARKER",
+                new_text="NEW_SOURCE_MARKER",
+            )
+        ],
+    )
+    preview = ExecutionPlanApplier(tmp_path).preview(plan)
+
+    result = LocalTaskRunner(tmp_path, tmp_path, FailingProvider()).run(
+        "替换",
+        TaskRunOptions(
+            apply_changes=True,
+            execution_plan=plan,
+            expected_preview_fingerprint=preview.preview_fingerprint,
+            prepared_response=response,
+            history_plan_text="SANITIZED_HISTORY_MARKER",
+        ),
+    )
+
+    history = (tmp_path / ".agent" / "history" / "tasks.jsonl").read_text(
+        encoding="utf-8"
+    )
+    assert result.plan_text == "RAW_PROVIDER_BODY_MARKER"
+    assert "SANITIZED_HISTORY_MARKER" in history
+    assert "RAW_PROVIDER_BODY_MARKER" not in history
+    assert "OLD_SOURCE_MARKER" not in history
+    assert "NEW_SOURCE_MARKER" not in history
+
+
+def test_runner_uses_history_plan_text_for_execution_failure(tmp_path: Path) -> None:
+    write_text_utf8(tmp_path / "target.md", "prefix OLD_FAILURE_MARKER\n")
+    plan = ExecutionPlan(
+        "替换",
+        [
+            ExecutionOperation(
+                action="replace_text",
+                path="target.md",
+                old_text="OLD_FAILURE_MARKER",
+                new_text="NEW_FAILURE_MARKER",
+            )
+        ],
+    )
+    approved_fingerprint = ExecutionPlanApplier(tmp_path).preview(
+        plan
+    ).preview_fingerprint
+    write_text_utf8(
+        tmp_path / "target.md",
+        "prefix OLD_FAILURE_MARKER\nexternal change\n",
+    )
+
+    result = LocalTaskRunner(tmp_path, tmp_path, FailingProvider()).run(
+        "替换失败",
+        TaskRunOptions(
+            apply_changes=True,
+            execution_plan=plan,
+            expected_preview_fingerprint=approved_fingerprint,
+            prepared_response=prepared_response(),
+            history_plan_text="SANITIZED_FAILURE_MARKER",
+        ),
+    )
+
+    history = (tmp_path / ".agent" / "history" / "tasks.jsonl").read_text(
+        encoding="utf-8"
+    )
+    assert result.execution_error is not None
+    assert "SANITIZED_FAILURE_MARKER" in history
+    assert "OLD_FAILURE_MARKER" not in history
+    assert "NEW_FAILURE_MARKER" not in history

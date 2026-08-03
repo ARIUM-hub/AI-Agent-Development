@@ -10,6 +10,7 @@ from dev_agent.execution.models import (
     ExecutionResult,
 )
 from dev_agent.execution.plan import ExecutionPlanError, StaleExecutionPreviewError
+from dev_agent.execution.text_operations import apply_replace_text
 from dev_agent.execution.validation import ExecutionPlanValidator
 from dev_agent.tools.git import GitReader
 
@@ -50,15 +51,25 @@ class ExecutionPlanApplier:
         for operation in plan.operations:
             target = self.validator.resolve_target(operation.path)
             before_exists = target.exists()
+            operation_content = self._content_for_operation(operation)
             if operation.action == "create_text":
                 if before_exists:
                     raise ExecutionPlanError(f"path already exists: {operation.path}")
-                write_text_utf8(target, operation.content)
+                write_text_utf8(target, operation_content)
             elif operation.action == "overwrite_text":
-                write_text_utf8(target, operation.content)
+                write_text_utf8(target, operation_content)
             elif operation.action == "append_text":
                 existing = read_text_utf8(target) if before_exists else ""
-                write_text_utf8(target, existing + operation.content)
+                write_text_utf8(target, existing + operation_content)
+            elif operation.action == "replace_text":
+                try:
+                    existing = target.read_bytes().decode(UTF8) if before_exists else ""
+                except UnicodeDecodeError as exc:
+                    raise ExecutionPlanError(
+                        f"文件不是有效 UTF-8：{operation.path}"
+                    ) from exc
+                updated = apply_replace_text(operation, existing, before_exists)
+                target.write_bytes(updated.encode(UTF8))
             else:
                 raise ExecutionPlanError(f"unsupported action: {operation.action}")
             changes.append(
@@ -67,7 +78,7 @@ class ExecutionPlanApplier:
                     path=operation.path,
                     before_exists=before_exists,
                     after_exists=target.exists(),
-                    bytes_written=len(operation.content.encode(UTF8)),
+                    bytes_written=len(operation_content.encode(UTF8)),
                 )
             )
         diff_stat = GitReader(self.repo_root).snapshot().diff_stat
@@ -81,7 +92,7 @@ class ExecutionPlanApplier:
         )
 
     def _content_preview_for_operation(self, operation: ExecutionOperation) -> dict[str, object]:
-        content = operation.content
+        content = self._content_for_operation(operation)
         line_parts = content.splitlines(keepends=True)
         line_count = len(content.splitlines())
         line_limited = "".join(line_parts[:CONTENT_PREVIEW_MAX_LINES])
@@ -106,7 +117,7 @@ class ExecutionPlanApplier:
                 action=operation.action,
                 path=operation.path,
                 exists=self.validator.resolve_target(operation.path).exists(),
-                content_bytes=len(operation.content.encode(UTF8)),
+                content_bytes=len(self._content_for_operation(operation).encode(UTF8)),
                 risk=self._risk_for_operation(operation),
                 **self._content_preview_for_operation(operation),
             )
@@ -121,4 +132,17 @@ class ExecutionPlanApplier:
         if operation.action == "append_text":
             target = self.validator.resolve_target(operation.path)
             return "append" if target.exists() else "append_create"
+        if operation.action == "replace_text":
+            return "replace"
         raise ExecutionPlanError(f"unsupported action: {operation.action}")
+
+    def _content_for_operation(self, operation: ExecutionOperation) -> str:
+        if operation.action == "replace_text":
+            if not isinstance(operation.new_text, str):
+                raise ExecutionPlanError(
+                    f"replace_text 的 new_text 必须是字符串：{operation.path}"
+                )
+            return operation.new_text
+        if not isinstance(operation.content, str):
+            raise ExecutionPlanError(f"content must be a string: {operation.path}")
+        return operation.content

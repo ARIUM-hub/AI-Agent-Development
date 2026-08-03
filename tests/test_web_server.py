@@ -369,6 +369,19 @@ def test_web_diff_view_javascript_behaviors() -> None:
     assert completed.returncode == 0, completed.stdout + completed.stderr
 
 
+def test_web_assets_include_replace_risk_label_and_style() -> None:
+    static_root = Path(__file__).parents[1] / "src" / "dev_agent" / "web" / "static"
+    app_js = (static_root / "app.js").read_text(encoding="utf-8")
+    styles = (static_root / "styles.css").read_text(encoding="utf-8")
+
+    assert 'if (risk === "replace")' in app_js
+    assert 'return "替换";' in app_js
+    assert 'return "risk-replace";' in app_js
+    assert ".preview-card.risk-replace" in styles
+    assert ".risk-badge.risk-replace" in styles
+    assert ".audit-card.risk-replace" in styles
+
+
 def test_provider_plan_preview_route_returns_preview_without_writing(tmp_path) -> None:
     write_text_utf8(tmp_path / "pyproject.toml", "[project]\nname = \"sample\"\n")
     server, base_url = start_server(tmp_path)
