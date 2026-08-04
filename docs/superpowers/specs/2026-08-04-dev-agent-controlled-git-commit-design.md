@@ -215,7 +215,7 @@ preflight 必须确认：
 以下任一 Git 操作进行中时拒绝：
 
 - merge
-- rebase（apply 或 merge 后端）
+- rebase（`rebase-apply` 或 `rebase-merge` 后端）
 - cherry-pick
 - revert
 - bisect
@@ -285,6 +285,7 @@ git status --porcelain=v1 -z --untracked-files=all
 - 当前分支仍等于初始分支。
 - 新提交的文件集合与 `changed_paths` 完全相同。
 - 新提交 message 与用户提供的 message 完全相同。
+- 所有目标路径相对新 HEAD 为 clean；成功 hook 不得留下未验证的目标正文。
 - 初始无关 staged/unstaged/untracked 状态仍保持原样。
 
 任一提交后校验失败均报告严重的 commit 错误并保留现场，不自动 reset 已创建提交。历史必须明确记录校验失败，避免误报成功。
@@ -416,6 +417,7 @@ hook 可能修改工作区或 index。hook 失败后仍按上述规则只取消�
 - 失败后目标正文保留，目标不再 staged。
 - 无关 staged、unstaged 和 untracked 状态保持原样。
 - hook 产生的额外文件保留并被报告。
+- hook 返回成功但留下目标工作区变化时，提交后校验失败且不自动 reset 已创建提交。
 - 恢复失败时给出明确、脱敏的人工检查提示。
 
 ### 成功提交
@@ -463,7 +465,7 @@ hook 可能修改工作区或 index。hook 失败后仍按上述规则只取消�
 - runner 自身的 `.agent` 审计写入在受保护窗口内冻结，不加入白名单或状态过滤。
 - 提交只包含执行计划实际修改的目标路径，不包含无关 staged 内容，不创建空提交。
 - commit/hook 失败只取消目标暂存，保留正文和无关状态。
-- 成功提交的父提交、message、文件集合和 SHA 全部经过校验。
+- 成功提交的父提交、message、文件集合、目标 clean 状态和 SHA 全部经过校验。
 - CLI JSON 与历史准确记录结果，Web 只返回空 commit 字段。
 - fake、plan-file 和真实 Provider 行为兼容，真实 Provider 请求数保持为 1。
 - 不新增第三方依赖，不访问真实供应商，完整自动化测试通过。
