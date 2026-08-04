@@ -8,6 +8,7 @@ from dev_agent.providers.models import ModelResponse, ProviderUsage
 from dev_agent.tools.git import GitSnapshot
 from dev_agent.verification.planner import VerificationPlan
 from dev_agent.verification.runner import VerificationResult
+from dev_agent.git.models import CommitConfirmation, GitCommitRequest, GitCommitResult
 
 
 @dataclass(frozen=True)
@@ -32,6 +33,8 @@ class TaskRunOptions:
     prepared_response: ModelResponse | None = None
     provider_model: str | None = None
     history_plan_text: str | None = None
+    commit_request: GitCommitRequest | None = None
+    confirm_commit: CommitConfirmation | None = None
 
 
 @dataclass(frozen=True)
@@ -52,3 +55,6 @@ class TaskRunResult:
     execution_error: str | None = None
     file_diffs: list[dict[str, object]] = field(default_factory=list)
     preview_fingerprint: str = ""
+    git_commit: GitCommitResult | None = None
+    commit_error: str | None = None
+    commit_declined: bool = False

@@ -1,4 +1,6 @@
 from pathlib import Path
+import json
+import subprocess
 
 from dev_agent.config.models import ProjectConfig, UserPreferences
 from dev_agent.encoding import write_text_utf8
@@ -15,6 +17,7 @@ from dev_agent.runtime.prompts import build_task_prompt
 from dev_agent.runtime.runner import LocalTaskRunner
 from dev_agent.tools.git import GitSnapshot
 from dev_agent.verification.planner import VerificationPlan, VerificationStep
+from dev_agent.git.models import GitCommitRequest
 
 
 def test_build_task_prompt_includes_request_context_memory_and_verification(tmp_path) -> None:
@@ -309,3 +312,64 @@ def test_runner_uses_history_plan_text_for_execution_failure(tmp_path: Path) -> 
     assert "SANITIZED_FAILURE_MARKER" in history
     assert "OLD_FAILURE_MARKER" not in history
     assert "NEW_FAILURE_MARKER" not in history
+
+
+def _init_commit_repo(repo: Path, command: str) -> None:
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "tester"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.email", "tester@example.invalid"], cwd=repo, check=True)
+    write_text_utf8(repo / "target.txt", "before\n")
+    write_text_utf8(repo / ".agent" / "commands.yaml", f"test: {command}\n")
+    subprocess.run(["git", "add", "--", "target.txt", ".agent/commands.yaml"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "base"], cwd=repo, check=True)
+
+
+def test_runner_commits_after_verification_and_freezes_audit(tmp_path: Path) -> None:
+    _init_commit_repo(tmp_path, 'python -c "print(\'ok\')"')
+    plan = ExecutionPlan("修改", [ExecutionOperation("overwrite_text", "target.txt", "after\n")])
+    preview = ExecutionPlanApplier(tmp_path).preview(plan)
+
+    def confirm(_request: GitCommitRequest, paths: tuple[str, ...]) -> bool:
+        task_file = next((tmp_path / ".agent" / "tasks").glob("*.json"))
+        assert json.loads(task_file.read_text(encoding="utf-8"))["events"][-1] == "provider_completed"
+        assert not (tmp_path / ".agent" / "history" / "tasks.jsonl").exists()
+        assert paths == ("target.txt",)
+        return True
+
+    result = LocalTaskRunner(tmp_path, tmp_path, FakeProvider("fake", ["计划"])).run(
+        "修改",
+        TaskRunOptions(
+            apply_changes=True,
+            run_verification=True,
+            execution_plan=plan,
+            expected_preview_fingerprint=preview.preview_fingerprint,
+            commit_request=GitCommitRequest("fix: 修改"),
+            confirm_commit=confirm,
+        ),
+    )
+    assert result.git_commit is not None
+    assert result.git_commit.paths == ("target.txt",)
+    assert result.commit_error is None
+    assert "commit_completed" in result.events
+
+
+def test_runner_skips_commit_when_verification_fails(tmp_path: Path) -> None:
+    _init_commit_repo(tmp_path, 'python -c "import sys; sys.exit(7)"')
+    plan = ExecutionPlan("修改", [ExecutionOperation("overwrite_text", "target.txt", "after\n")])
+    preview = ExecutionPlanApplier(tmp_path).preview(plan)
+    calls = 0
+
+    def confirm(_request: GitCommitRequest, _paths: tuple[str, ...]) -> bool:
+        nonlocal calls
+        calls += 1
+        return True
+
+    result = LocalTaskRunner(tmp_path, tmp_path, FakeProvider("fake", ["计划"])).run(
+        "修改",
+        TaskRunOptions(apply_changes=True, run_verification=True, execution_plan=plan,
+            expected_preview_fingerprint=preview.preview_fingerprint,
+            commit_request=GitCommitRequest("fix: 不提交"), confirm_commit=confirm),
+    )
+    assert calls == 0
+    assert result.verification_result is not None and not result.verification_result.passed
+    assert result.git_commit is None

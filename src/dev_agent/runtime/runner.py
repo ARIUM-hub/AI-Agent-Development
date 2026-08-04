@@ -15,6 +15,14 @@ from dev_agent.runtime.prompts import build_task_prompt
 from dev_agent.tasks.state import TaskStatus, create_task, update_task_status
 from dev_agent.tools.git import GitReader
 from dev_agent.verification.runner import VerificationRunner
+from dev_agent.git.commit_guard import GitCommitGuard
+from dev_agent.git.models import (
+    GitCommitCommandError,
+    GitCommitPreflightError,
+    GitCommitRejectedError,
+    GitCommitRequest,
+)
+from dev_agent.tasks.state import TaskState
 
 
 class LocalTaskRunner:
@@ -40,6 +48,10 @@ class LocalTaskRunner:
             else options.history_plan_text
         )
         task = update_task_status(self.repo_root, task.task_id, TaskStatus.RUNNING, "provider_completed")
+        if options.commit_request is not None:
+            return self._run_guarded_commit(
+                task, context, response, history_plan_text, user_request, options
+            )
         events = [*task.events]
         verification_result = None
         execution_result = ExecutionResult(applied=False, planned_changes=[])
@@ -117,6 +129,86 @@ class LocalTaskRunner:
             execution_error=execution_error,
             file_diffs=execution_result.file_diffs_as_dicts(),
             preview_fingerprint=execution_result.preview_fingerprint,
+        )
+
+    def _run_guarded_commit(
+        self, task: TaskState, context, response, history_plan_text: str,
+        user_request: str, options: TaskRunOptions,
+    ) -> TaskRunResult:
+        if options.execution_plan is None or options.confirm_commit is None:
+            raise GitCommitPreflightError("受控提交需要执行计划和提交确认回调")
+        guard = GitCommitGuard(self.repo_root)
+        try:
+            snapshot = guard.preflight(options.execution_plan, context.verification_plan)
+        except GitCommitPreflightError:
+            update_task_status(self.repo_root, task.task_id, TaskStatus.FAILED, "commit_rejected")
+            raise
+        queued = ["commit_preflight_completed"]
+        execution_result = ExecutionResult(applied=False, planned_changes=[])
+        execution_error = None
+        verification_result = None
+        git_commit = None
+        commit_error = None
+        declined = False
+        try:
+            preview = self._execution_preview(options)
+            expected = options.expected_preview_fingerprint or preview.preview_fingerprint
+            execution_result = self._apply_execution_plan(options, expected)
+            queued.append("execution_completed")
+        except ExecutionPlanError as exc:
+            execution_error = str(exc)
+            queued.append("execution_failed")
+        if execution_error is None:
+            verification_result = VerificationRunner(self.repo_root).run(context.verification_plan)
+            queued.append("verification_completed")
+            if verification_result.passed:
+                try:
+                    paths = guard.prepare_commit(snapshot)
+                    request = GitCommitRequest(options.commit_request.message, snapshot.target_paths)
+                    if options.confirm_commit(request, paths):
+                        git_commit = guard.commit(snapshot, request.message, paths)
+                        queued.append("commit_completed")
+                    else:
+                        declined = True
+                        queued.append("commit_rejected")
+                except GitCommitRejectedError as exc:
+                    commit_error = str(exc)
+                    queued.append("commit_rejected")
+                except GitCommitCommandError as exc:
+                    commit_error = str(exc)
+                    queued.append("commit_failed")
+        if execution_error or commit_error or (verification_result and not verification_result.passed):
+            status = TaskStatus.FAILED
+        elif declined:
+            status = TaskStatus.BLOCKED
+        else:
+            status = TaskStatus.PASSED
+        for event in queued:
+            task = update_task_status(self.repo_root, task.task_id, TaskStatus.RUNNING, event)
+        task = update_task_status(self.repo_root, task.task_id, status, "runtime_completed")
+        summary = self._build_summary(history_plan_text, execution_result)
+        if git_commit:
+            summary += f"\n\nGit commit: {git_commit.sha}\nMessage: {git_commit.message}\nPaths: " + ", ".join(git_commit.paths)
+        elif commit_error:
+            summary += "\n\n提交失败：" + commit_error
+        elif declined:
+            summary += "\n\n用户拒绝创建 Git 提交。"
+        else:
+            summary += "\n\n验证失败，未创建 Git 提交。"
+        self._record_history(task.task_id, user_request, task.status.value, summary,
+            task.events, [" ".join(step.command) for step in context.verification_plan.steps])
+        return TaskRunResult(
+            task_id=task.task_id, plan_text=response.text, dry_run=options.dry_run,
+            memory_hit_count=len(context.memory_hits),
+            verification_steps=[step.command for step in context.verification_plan.steps],
+            provider=response.provider, model=options.provider_model,
+            provider_usage=response.usage, verification_result=verification_result,
+            events=task.events, planned_changes=execution_result.planned_changes,
+            applied_changes=execution_result.changes_as_dicts(),
+            diff_stat=execution_result.diff_stat, execution_error=execution_error,
+            file_diffs=execution_result.file_diffs_as_dicts(),
+            preview_fingerprint=execution_result.preview_fingerprint,
+            git_commit=git_commit, commit_error=commit_error, commit_declined=declined,
         )
 
     def _execution_preview(self, options: TaskRunOptions) -> ExecutionResult:
