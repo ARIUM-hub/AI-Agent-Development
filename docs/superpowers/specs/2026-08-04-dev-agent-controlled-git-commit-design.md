@@ -273,10 +273,10 @@ git status --porcelain=v1 -z --untracked-files=all
 1. 记录目标暂存前状态。
 2. 使用参数数组执行 `git add -- <changed_paths>`。
 3. 再次检查 index，确保目标对应暂存差异存在，且无关 index 状态与初始快照一致。
-4. 使用参数数组执行 `git commit --only -m <message> -- <changed_paths>`。
+4. 使用参数数组执行 `git commit --only --cleanup=verbatim -m <message> -- <changed_paths>`，禁止 Git 自动清理用户显式 message。
 5. 读取新的 HEAD、父提交、提交 message 和 `git diff-tree` 文件集合。
 
-`--only` 是提交隔离的最后一道边界：即使仓库运行前已有无关 staged 内容，也只能提交明确路径。不得使用 `git commit -a`、不带路径的 `git commit` 或 `--amend`。
+`--only` 是提交隔离的最后一道边界：即使仓库运行前已有无关 staged 内容，也只能提交明确路径。`--cleanup=verbatim` 保证 1 至 200 字符的单行 message 按用户输入原样进入 commit object。不得使用 `git commit -a`、不带路径的 `git commit` 或 `--amend`。
 
 提交成功必须同时满足：
 
