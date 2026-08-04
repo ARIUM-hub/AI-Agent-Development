@@ -1357,3 +1357,78 @@ def test_openai_context_replace_rejects_unselected_target_once(
     assert server.request_count == 1
     assert (repo / "src" / "app.py").read_bytes() == b"OLD_UNSELECTED_MARKER\n"
     assert not (repo / ".agent").exists()
+
+
+def test_commit_requires_apply_verify_and_message(tmp_path: Path) -> None:
+    result = run_cli(
+        tmp_path, "run", "提交", "--fake-response", strict_cli_plan(),
+        "--use-provider-plan", "--commit",
+    )
+    assert result.returncode == 2
+    assert "--apply" in result.stderr
+
+
+def test_plan_file_commit_yes_returns_git_result(tmp_path: Path) -> None:
+    init_cli_git_repo(tmp_path)
+    track_cli_file(tmp_path, "tracked.txt", b"before\n")
+    write_text_utf8(tmp_path / ".agent" / "commands.yaml", 'test: python -c "print(\'ok\')"\n')
+    subprocess.run(["git", "add", "--", ".agent/commands.yaml"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-qm", "base"], cwd=tmp_path, check=True)
+    plan_file = tmp_path / "plan.json"
+    plan_file.write_text(json.dumps({"summary": "修改", "operations": [
+        {"action": "overwrite_text", "path": "tracked.txt", "content": "after\n"}
+    ]}, ensure_ascii=False), encoding="utf-8")
+    result = run_cli(
+        tmp_path, "run", "修改", "--fake-response", "计划", "--plan-file", str(plan_file),
+        "--apply", "--verify", "--commit", "--commit-message", "fix: 修改", "--yes",
+    )
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["git_commit"]["message"] == "fix: 修改"
+    assert payload["git_commit"]["paths"] == ["tracked.txt"]
+    assert payload["commit_error"] is None
+
+
+def test_commit_rejects_empty_verification_plan_before_apply(tmp_path: Path) -> None:
+    init_cli_git_repo(tmp_path)
+    track_cli_file(tmp_path, "tracked.txt", b"before\n")
+    subprocess.run(["git", "commit", "-qm", "base"], cwd=tmp_path, check=True)
+    plan_file = tmp_path / "plan.json"
+    plan_file.write_text(json.dumps({"summary": "修改", "operations": [
+        {"action": "overwrite_text", "path": "tracked.txt", "content": "after\n"}
+    ]}, ensure_ascii=False), encoding="utf-8")
+    result = run_cli(
+        tmp_path, "run", "修改", "--fake-response", "计划", "--plan-file", str(plan_file),
+        "--apply", "--verify", "--commit", "--commit-message", "fix: 修改", "--yes",
+    )
+    assert result.returncode == 2
+    assert "至少需要一条验证命令" in result.stderr
+    assert (tmp_path / "tracked.txt").read_text(encoding="utf-8") == "before\n"
+
+
+def test_openai_commit_reuses_one_response(
+    tmp_path: Path, provider_server_factory: Callable
+) -> None:
+    repo, home = tmp_path / "repo", tmp_path / "home"
+    repo.mkdir()
+    home.mkdir()
+    init_cli_git_repo(repo)
+    track_cli_file(repo, "target.md", "旧值\n".encode("utf-8"))
+    write_text_utf8(repo / ".agent" / "commands.yaml", 'test: python -c "print(\'ok\')"\n')
+    subprocess.run(["git", "add", "--", ".agent/commands.yaml"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "base"], cwd=repo, check=True)
+    server = provider_server_factory(
+        json.dumps(replace_plan("target.md", "旧值", "新值"), ensure_ascii=False)
+    )
+    write_provider_config(home, server.base_url)
+    result = run_cli(
+        repo, "run", "替换", "--provider", "openai-compatible",
+        "--context-file", "target.md", "--apply", "--verify", "--commit",
+        "--commit-message", "fix: 替换", "--yes", home=home,
+        extra_env={"DEV_AGENT_API_KEY": "test-key"},
+    )
+    payload = json.loads(result.stdout)
+    assert result.returncode == 0
+    assert server.request_count == 1
+    assert payload["provider_usage"]["request_count"] == 1
+    assert payload["git_commit"]["paths"] == ["target.md"]

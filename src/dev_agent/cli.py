@@ -38,6 +38,8 @@ from dev_agent.runtime.source_context import (
     build_source_context,
 )
 from dev_agent.web.server import create_server
+from dev_agent.git.commit_guard import validate_commit_message
+from dev_agent.git.models import GitCommitPreflightError, GitCommitRequest
 
 
 def _json(data: dict[str, object]) -> str:
@@ -158,6 +160,8 @@ def _preview_payload(
         "file_diffs": preview_result.file_diffs_as_dicts(),
         "preview_fingerprint": preview_result.preview_fingerprint,
         "source_context": None,
+        "git_commit": None,
+        "commit_error": None,
         **_provider_metadata("fake", None, None),
     }
 
@@ -205,6 +209,8 @@ def _prepared_preview_payload(
         "file_diffs": preview.file_diffs_as_dicts(),
         "preview_fingerprint": preview.preview_fingerprint,
         "source_context": _source_context_metadata(prepared.source_context),
+        "git_commit": None,
+        "commit_error": None,
         **_provider_metadata(
             prepared.provider_name,
             prepared.model,
@@ -223,6 +229,34 @@ def _confirm_apply(args: Namespace) -> bool:
     sys.stderr.write("应用执行计划需要确认。输入 yes 继续：")
     answer = sys.stdin.readline().strip()
     return answer == "yes"
+
+
+def _confirm_commit(args: Namespace, request: GitCommitRequest, paths: tuple[str, ...]) -> bool:
+    if args.yes:
+        return True
+    if not sys.stdin.isatty():
+        return False
+    sys.stderr.write(
+        f"验证已通过。提交信息：{request.message}；文件：{', '.join(paths)}。输入 yes 创建提交："
+    )
+    return sys.stdin.readline().strip() == "yes"
+
+
+def _validate_commit_arguments(args: Namespace) -> None:
+    if not args.commit:
+        if args.commit_message is not None:
+            raise ValueError("--commit-message 只能与 --commit 同时使用")
+        return
+    if not args.apply:
+        raise ValueError("--commit 必须与 --apply 同时使用")
+    if not args.verify:
+        raise ValueError("--commit 必须与 --verify 同时使用")
+    if args.commit_message is None:
+        raise ValueError("--commit 必须提供 --commit-message")
+    try:
+        validate_commit_message(args.commit_message)
+    except GitCommitPreflightError as exc:
+        raise ValueError(str(exc)) from exc
 
 
 def _validate_run_arguments(args: Namespace) -> None:
@@ -274,6 +308,8 @@ def _result_payload(
         "file_diffs": result.file_diffs,
         "preview_fingerprint": result.preview_fingerprint,
         "source_context": _source_context_metadata(source_context),
+        "git_commit": None if result.git_commit is None else result.git_commit.to_dict(),
+        "commit_error": result.commit_error,
         **_provider_metadata(
             result.provider,
             result.model,
@@ -315,11 +351,13 @@ def _run_fake_command(args: Namespace) -> int:
             apply_changes=args.apply,
             execution_plan=execution_plan,
             expected_preview_fingerprint=preview_result.preview_fingerprint or None,
+            commit_request=GitCommitRequest(args.commit_message) if args.commit else None,
+            confirm_commit=(lambda request, paths: _confirm_commit(args, request, paths)) if args.commit else None,
         ),
     )
     payload = _result_payload(result, preview_result)
     sys.stdout.write(_json(payload))
-    return 1 if result.execution_error else 0
+    return _result_exit_code(result)
 
 
 def _run_openai_compatible_command(args: Namespace) -> int:
@@ -377,6 +415,8 @@ def _run_openai_compatible_command(args: Namespace) -> int:
             history_plan_text=build_execution_plan_history_text(
                 prepared.execution_plan
             ),
+            commit_request=GitCommitRequest(args.commit_message) if args.commit else None,
+            confirm_commit=(lambda request, paths: _confirm_commit(args, request, paths)) if args.commit else None,
         ),
     )
     sys.stdout.write(
@@ -388,18 +428,33 @@ def _run_openai_compatible_command(args: Namespace) -> int:
             )
         )
     )
-    return 1 if result.execution_error else 0
+    return _result_exit_code(result)
+
+
+def _result_exit_code(result) -> int:
+    if result.commit_declined:
+        return 2
+    if result.execution_error or result.commit_error:
+        return 1
+    if result.verification_result is not None and not result.verification_result.passed:
+        return 1
+    return 0
 
 
 def run_command(args: Namespace) -> int:
     try:
+        _validate_commit_arguments(args)
         _validate_run_arguments(args)
     except ValueError as exc:
         sys.stderr.write(str(exc) + "\n")
         return 2
-    if args.provider == "openai-compatible":
-        return _run_openai_compatible_command(args)
-    return _run_fake_command(args)
+    try:
+        if args.provider == "openai-compatible":
+            return _run_openai_compatible_command(args)
+        return _run_fake_command(args)
+    except GitCommitPreflightError as exc:
+        sys.stderr.write(str(exc) + "\n")
+        return 2
 
 
 def serve_command(args: Namespace) -> int:
@@ -463,6 +518,8 @@ def build_parser() -> ArgumentParser:
     run_parser.add_argument("--preview", action="store_true")
     run_parser.add_argument("--apply", action="store_true")
     run_parser.add_argument("--yes", action="store_true")
+    run_parser.add_argument("--commit", action="store_true")
+    run_parser.add_argument("--commit-message")
     run_parser.set_defaults(handler=run_command)
 
     serve_parser = subparsers.add_parser("serve")

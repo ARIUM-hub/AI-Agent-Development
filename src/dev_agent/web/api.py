@@ -115,6 +115,8 @@ def _provider_plan_payload(
         "execution_error": execution_error,
         "file_diffs": preview_result.file_diffs_as_dicts(),
         "preview_fingerprint": preview_result.preview_fingerprint,
+        "git_commit": None,
+        "commit_error": None,
     }
 
 
@@ -211,4 +213,6 @@ def run_dry_run_task(
         "execution_error": None,
         "file_diffs": [],
         "preview_fingerprint": "",
+        "git_commit": None,
+        "commit_error": None,
     }

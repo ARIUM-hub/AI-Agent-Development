@@ -81,6 +81,8 @@ def test_run_dry_run_task_requires_fake_response_and_records_history(tmp_path) -
     assert payload["plan_text"] == "计划：先看上下文，再跑测试。"
     assert payload["dry_run"] is True
     assert payload["verification_steps"] == [["python", "-m", "pytest"]]
+    assert payload["git_commit"] is None
+    assert payload["commit_error"] is None
     history = (tmp_path / ".agent" / "history" / "tasks.jsonl").read_text(encoding="utf-8")
     assert "生成实现计划" in history
 
@@ -171,6 +173,8 @@ def test_preview_provider_plan_task_returns_preview_without_side_effects(tmp_pat
     assert payload["file_diffs"][0]["path"] == "docs/from-web-provider.md"
     assert payload["file_diffs"][0]["status"] == "added"
     assert payload["preview_fingerprint"].startswith("sha256:")
+    assert payload["git_commit"] is None
+    assert payload["commit_error"] is None
     assert not (tmp_path / ".agent").exists()
     assert not (tmp_path / "docs" / "from-web-provider.md").exists()
 
@@ -225,6 +229,8 @@ def test_apply_provider_plan_task_writes_file_and_records_history(tmp_path) -> N
     assert payload["applied_changes"][0]["path"] == "docs/from-web-provider.md"
     assert payload["file_diffs"] == preview["file_diffs"]
     assert payload["preview_fingerprint"] == preview["preview_fingerprint"]
+    assert payload["git_commit"] is None
+    assert payload["commit_error"] is None
     assert (tmp_path / "docs" / "from-web-provider.md").read_text(encoding="utf-8") == "确认写入\n"
     history = (tmp_path / ".agent" / "history" / "tasks.jsonl").read_text(encoding="utf-8")
     assert "确认 Web provider plan" in history
