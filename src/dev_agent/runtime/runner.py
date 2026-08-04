@@ -140,8 +140,18 @@ class LocalTaskRunner:
         guard = GitCommitGuard(self.repo_root)
         try:
             snapshot = guard.preflight(options.execution_plan, context.verification_plan)
-        except GitCommitPreflightError:
-            update_task_status(self.repo_root, task.task_id, TaskStatus.FAILED, "commit_rejected")
+        except GitCommitPreflightError as exc:
+            task = update_task_status(
+                self.repo_root, task.task_id, TaskStatus.FAILED, "commit_rejected"
+            )
+            self._record_history(
+                task.task_id,
+                user_request,
+                task.status.value,
+                history_plan_text + "\n\n提交预检失败：" + str(exc),
+                task.events,
+                [" ".join(step.command) for step in context.verification_plan.steps],
+            )
             raise
         queued = ["commit_preflight_completed"]
         execution_result = ExecutionResult(applied=False, planned_changes=[])

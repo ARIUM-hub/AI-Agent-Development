@@ -2,6 +2,8 @@ from pathlib import Path
 import json
 import subprocess
 
+import pytest
+
 from dev_agent.config.models import ProjectConfig, UserPreferences
 from dev_agent.encoding import write_text_utf8
 from dev_agent.execution.applier import ExecutionPlanApplier
@@ -18,6 +20,7 @@ from dev_agent.runtime.runner import LocalTaskRunner
 from dev_agent.tools.git import GitSnapshot
 from dev_agent.verification.planner import VerificationPlan, VerificationStep
 from dev_agent.git.models import GitCommitRequest
+from dev_agent.git.models import GitCommitPreflightError
 
 
 def test_build_task_prompt_includes_request_context_memory_and_verification(tmp_path) -> None:
@@ -373,3 +376,25 @@ def test_runner_skips_commit_when_verification_fails(tmp_path: Path) -> None:
     assert calls == 0
     assert result.verification_result is not None and not result.verification_result.passed
     assert result.git_commit is None
+
+
+def test_runner_records_commit_preflight_failure_history(tmp_path: Path) -> None:
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "tester"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.email", "tester@example.invalid"], cwd=tmp_path, check=True)
+    write_text_utf8(tmp_path / "target.txt", "before\n")
+    subprocess.run(["git", "add", "--", "target.txt"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-qm", "base"], cwd=tmp_path, check=True)
+    plan = ExecutionPlan("修改", [ExecutionOperation("overwrite_text", "target.txt", "after\n")])
+
+    with pytest.raises(GitCommitPreflightError, match="至少需要一条验证命令"):
+        LocalTaskRunner(tmp_path, tmp_path, FakeProvider("fake", ["计划"])).run(
+            "修改",
+            TaskRunOptions(apply_changes=True, run_verification=True, execution_plan=plan,
+                commit_request=GitCommitRequest("fix: 修改"),
+                confirm_commit=lambda _request, _paths: True),
+        )
+
+    history = MemoryStore(tmp_path).list_tasks()
+    assert history[-1].status == "failed"
+    assert "提交预检失败" in history[-1].summary
