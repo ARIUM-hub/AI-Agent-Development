@@ -4,7 +4,12 @@ import subprocess
 import pytest
 
 from dev_agent.git.commit_guard import parse_porcelain_v1_z, validate_commit_message
-from dev_agent.git.models import GitCommitPreflightError, GitStatusEntry
+from dev_agent.git.models import (
+    GitCommitCommandError,
+    GitCommitPreflightError,
+    GitCommitRejectedError,
+    GitStatusEntry,
+)
 from dev_agent.execution.models import ExecutionOperation, ExecutionPlan
 from dev_agent.git.commit_guard import GitCommitGuard
 from dev_agent.verification.planner import VerificationPlan, VerificationStep
@@ -146,3 +151,54 @@ def test_preflight_rejects_git_operation_in_progress(
         path.write_text("in progress\n", encoding="utf-8")
     with pytest.raises(GitCommitPreflightError, match=label):
         GitCommitGuard(tmp_path).preflight(overwrite_plan(), verification_plan())
+
+
+def test_prepare_commit_returns_changed_target_and_rejects_outside_drift(tmp_path: Path) -> None:
+    init_repo(tmp_path)
+    guard = GitCommitGuard(tmp_path)
+    snapshot = guard.preflight(overwrite_plan(), verification_plan())
+    (tmp_path / "tracked.txt").write_text("changed\n", encoding="utf-8")
+    assert guard.prepare_commit(snapshot) == ("tracked.txt",)
+    (tmp_path / "outside.tmp").write_text("generated\n", encoding="utf-8")
+    with pytest.raises(GitCommitRejectedError, match="目标外 Git 状态发生变化"):
+        guard.prepare_commit(snapshot)
+
+
+def test_prepare_commit_rejects_empty_difference(tmp_path: Path) -> None:
+    init_repo(tmp_path)
+    guard = GitCommitGuard(tmp_path)
+    snapshot = guard.preflight(overwrite_plan(), verification_plan())
+    with pytest.raises(GitCommitRejectedError, match="没有实际变化"):
+        guard.prepare_commit(snapshot)
+
+
+def test_commit_only_target_and_preserve_unrelated_stage(tmp_path: Path) -> None:
+    init_repo(tmp_path)
+    (tmp_path / "other.txt").write_text("other\n", encoding="utf-8")
+    git(tmp_path, "add", "--", "other.txt")
+    guard = GitCommitGuard(tmp_path)
+    snapshot = guard.preflight(overwrite_plan(), verification_plan())
+    (tmp_path / "tracked.txt").write_text("changed\n", encoding="utf-8")
+    result = guard.commit(snapshot, " fix: 中文 ", guard.prepare_commit(snapshot))
+    assert result.paths == ("tracked.txt",)
+    assert git(tmp_path, "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD").stdout.strip() == "tracked.txt"
+    assert git(tmp_path, "status", "--short").stdout.strip() == "A  other.txt"
+    body = git(tmp_path, "cat-file", "commit", "HEAD").stdout.partition("\n\n")[2]
+    assert body.removesuffix("\n") == " fix: 中文 "
+
+
+def test_commit_hook_failure_unstages_target_and_keeps_body(tmp_path: Path) -> None:
+    init_repo(tmp_path)
+    hook = Path(git(tmp_path, "rev-parse", "--git-path", "hooks/pre-commit").stdout.strip())
+    if not hook.is_absolute():
+        hook = tmp_path / hook
+    hook.parent.mkdir(parents=True, exist_ok=True)
+    hook.write_text("#!/bin/sh\necho hook-denied >&2\nexit 1\n", encoding="utf-8", newline="\n")
+    hook.chmod(0o755)
+    guard = GitCommitGuard(tmp_path)
+    snapshot = guard.preflight(overwrite_plan(), verification_plan())
+    (tmp_path / "tracked.txt").write_text("changed\n", encoding="utf-8")
+    with pytest.raises(GitCommitCommandError, match="hook-denied"):
+        guard.commit(snapshot, "fix: fail", guard.prepare_commit(snapshot))
+    assert git(tmp_path, "diff", "--cached", "--name-only").stdout == ""
+    assert (tmp_path / "tracked.txt").read_text(encoding="utf-8") == "changed\n"

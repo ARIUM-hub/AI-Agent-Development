@@ -5,7 +5,10 @@ from dev_agent.execution.models import ExecutionPlan
 from dev_agent.execution.validation import ExecutionPlanValidator
 from dev_agent.git.models import (
     GitCommitError,
+    GitCommitCommandError,
     GitCommitPreflightError,
+    GitCommitRejectedError,
+    GitCommitResult,
     GitCommitSnapshot,
     GitStatusEntry,
 )
@@ -85,6 +88,106 @@ class GitCommitGuard:
             if operation.action == "create_text" and self._is_ignored(path):
                 raise GitCommitPreflightError(f"新建目标被 Git ignore：{path}")
         return GitCommitSnapshot(head_sha, branch, entries, targets)
+
+    def prepare_commit(self, snapshot: GitCommitSnapshot) -> tuple[str, ...]:
+        try:
+            head, branch = self._head_sha(), self._branch()
+        except GitCommitPreflightError as exc:
+            raise GitCommitRejectedError(str(exc)) from exc
+        if head != snapshot.head_sha:
+            raise GitCommitRejectedError("运行期间 HEAD 已变化，拒绝提交")
+        if branch != snapshot.branch:
+            raise GitCommitRejectedError("运行期间分支已变化，拒绝提交")
+        self._require_no_operation_in_progress(GitCommitRejectedError)
+        current = self._status_entries()
+        keys = {path.casefold() for path in snapshot.target_paths}
+        before = self._outside_entries(snapshot.status_entries, keys)
+        after = self._outside_entries(current, keys)
+        if before != after:
+            changed = sorted({path for entry in before ^ after for path in entry.paths})
+            raise GitCommitRejectedError("目标外 Git 状态发生变化：" + ", ".join(changed))
+        paths = tuple(sorted({entry.path for entry in current if all(p.casefold() in keys for p in entry.paths)}))
+        if not paths:
+            raise GitCommitRejectedError("目标路径没有实际变化，不创建空提交")
+        return paths
+
+    def commit(
+        self, snapshot: GitCommitSnapshot, message: str, changed_paths: tuple[str, ...]
+    ) -> GitCommitResult:
+        message = validate_commit_message(message)
+        paths = tuple(sorted(set(changed_paths)))
+        if not paths:
+            raise GitCommitRejectedError("目标路径没有实际变化，不创建空提交")
+        try:
+            self._git_command(["add", "--", *paths])
+            self._require_staged_targets(paths)
+            self._require_outside_state(snapshot)
+            self._git_command(
+                ["commit", "--only", "--cleanup=verbatim", "-m", message, "--", *paths]
+            )
+        except (GitCommitCommandError, GitCommitRejectedError):
+            self._restore_target_index(paths)
+            raise
+        sha = self._head_sha()
+        self._validate_created_commit(snapshot, sha, message, paths)
+        return GitCommitResult(sha, message, paths)
+
+    @staticmethod
+    def _outside_entries(
+        entries: tuple[GitStatusEntry, ...], keys: set[str]
+    ) -> frozenset[GitStatusEntry]:
+        return frozenset(entry for entry in entries if any(path.casefold() not in keys for path in entry.paths))
+
+    def _git_command(self, args: list[str]) -> CommandResult:
+        result = self.executor.run(["git", *args])
+        if result.exit_code != 0:
+            raise GitCommitCommandError(
+                self._sanitize_output(result.stderr or result.stdout) or "Git 提交命令执行失败"
+            )
+        return result
+
+    def _restore_target_index(self, paths: tuple[str, ...]) -> None:
+        result = self.executor.run(["git", "restore", "--staged", "--", *paths])
+        if result.exit_code != 0:
+            raise GitCommitCommandError(
+                "提交失败且目标暂存恢复失败，请人工检查 Git index："
+                + self._sanitize_output(result.stderr or result.stdout)
+            )
+
+    def _require_staged_targets(self, paths: tuple[str, ...]) -> None:
+        staged = tuple(sorted(filter(None, self._git_command(
+            ["diff", "--cached", "--name-only", "-z", "--", *paths]
+        ).stdout.split("\0"))))
+        if staged != paths:
+            raise GitCommitCommandError("目标暂存文件集合与审批范围不一致")
+
+    def _require_outside_state(self, snapshot: GitCommitSnapshot) -> None:
+        keys = {path.casefold() for path in snapshot.target_paths}
+        if self._outside_entries(snapshot.status_entries, keys) != self._outside_entries(self._status_entries(), keys):
+            raise GitCommitRejectedError("目标外 Git 状态发生变化")
+
+    def _validate_created_commit(
+        self, snapshot: GitCommitSnapshot, sha: str, message: str, paths: tuple[str, ...]
+    ) -> None:
+        parents = self._git_command(["rev-list", "--parents", "-n", "1", sha]).stdout.split()
+        if len(parents) != 2 or parents[1].lower() != snapshot.head_sha:
+            raise GitCommitCommandError("新提交父提交校验失败，请人工检查 Git 历史")
+        committed = tuple(sorted(filter(None, self._git_command(
+            ["diff-tree", "--no-commit-id", "--name-only", "-r", "-z", sha]
+        ).stdout.split("\0"))))
+        if committed != paths:
+            raise GitCommitCommandError("新提交文件集合校验失败，请人工检查 Git 历史")
+        body = self._git_command(["cat-file", "commit", sha]).stdout.partition("\n\n")[2].removesuffix("\n")
+        if body != message or self._branch() != snapshot.branch:
+            raise GitCommitCommandError("新提交 message 或分支校验失败，请人工检查 Git 历史")
+        keys = {path.casefold() for path in paths}
+        dirty = sorted({p for entry in self._status_entries() for p in entry.paths if p.casefold() in keys})
+        if dirty:
+            raise GitCommitCommandError("新提交后目标路径仍有未提交变化，请人工检查：" + ", ".join(dirty))
+        try:
+            self._require_outside_state(snapshot)
+        except GitCommitRejectedError as exc:
+            raise GitCommitCommandError("新提交后的仓库状态校验失败，请人工检查 Git 历史：" + str(exc)) from exc
 
     def _git(
         self, args: list[str], allowed: frozenset[int] = frozenset({0})
