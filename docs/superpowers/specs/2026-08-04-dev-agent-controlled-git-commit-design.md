@@ -44,13 +44,15 @@ dev-agent run "修复参数校验" `
 流程固定为：
 
 1. 取得并解析执行计划，生成预览与 Diff。
-2. 根据计划目标执行 Git commit 预检并保存初始快照。
-3. 确认 apply 后应用执行计划。
-4. 执行至少一条验证命令。
-5. 验证通过后比较 Git 快照，只允许目标路径产生本次变化。
-6. 显示待提交 message 和实际变化路径，第二次确认 commit。
-7. 只暂存并提交这些实际变化路径。
-8. 校验新提交的父提交和文件集合，输出结果并写入历史。
+2. runner 创建任务、取得 Provider 响应并持久化 `provider_completed` 基线。
+3. 根据计划目标执行 Git commit 预检并保存初始快照。
+4. 从此暂停 `.agent/tasks` 和 `.agent/history` 落盘，只在内存累计事件。
+5. 确认 apply 后应用执行计划。
+6. 执行至少一条验证命令。
+7. 验证通过后比较 Git 快照，只允许目标路径产生本次变化。
+8. 显示待提交 message 和实际变化路径，第二次确认 commit。
+9. 只暂存并提交这些实际变化路径。
+10. 校验新提交的父提交和文件集合，结束受保护窗口并统一写入任务状态和历史。
 
 未传 `--commit` 时，原有 preview、apply 和 verify 流程保持不变。
 
@@ -171,17 +173,33 @@ commit(snapshot, message, changed_paths) -> GitCommitResult
 
 `LocalTaskRunner` 的 commit 模式顺序为：
 
-1. 使用已预览的执行计划和 `GitCommitGuard` 快照。
-2. apply 并记录 `execution_completed`。
-3. 运行非空验证计划。
-4. 验证失败时直接结束，不调用确认回调或任何 Git 写命令。
-5. 调用 `prepare_commit()` 完成第二次状态检查。
-6. 无实际差异或发现状态漂移时拒绝提交。
-7. 调用 CLI 注入的确认回调；拒绝时保留现场。
-8. 调用 `commit()`，将结果放入 `TaskRunResult`。
-9. 最终统一写任务状态和历史，确保 commit 事件与结果属于同一任务。
+1. 创建任务、解析运行上下文、取得或复用 Provider 响应，并把 `provider_completed` 作为最后一个受保护窗口前事件落盘。
+2. 使用执行计划、提交请求和非空验证计划调用 `GitCommitGuard.preflight()`。
+3. preflight 成功后冻结任务与历史落盘；后续事件只追加到进程内列表。
+4. apply 并在内存记录 `execution_completed`。
+5. 运行非空验证计划并在内存记录 `verification_completed`。
+6. 验证失败时直接结束，不调用确认回调或任何 Git 写命令。
+7. 调用 `prepare_commit()` 完成第二次状态检查。
+8. 无实际差异或发现状态漂移时拒绝提交。
+9. 调用 CLI 注入的确认回调；拒绝时保留现场。
+10. 调用 `commit()`，将结果放入 `TaskRunResult`。
+11. commit 成功、拒绝或失败结果确定后结束冻结，统一持久化最终任务状态、完整事件和单条历史记录。
 
 确认回调只负责取得用户选择，不执行 Git 命令。`--yes` 使用恒真回调；交互模式使用 CLI 的单次 stdin 确认。用户拒绝以独立控制结果传播到 CLI，使退出码为 `2`，而不是伪装成 Git 异常。
+
+### 审计写入冻结
+
+`.agent/tasks` 和 `.agent/history` 属于 runner 自身审计副作用。它们不能加入目标路径白名单，也不能从 Git 状态比较中排除，否则会削弱“所有目标外路径状态不变”的边界。
+
+commit 模式采用以下规则：
+
+- `create_task`、`runtime_started` 和 `provider_completed` 在 preflight 前正常持久化，因此这些文件的当前状态进入完整初始快照。
+- preflight 成功后不得调用会写磁盘的 `update_task_status()`、`MemoryStore.append_task()` 或经验提取落盘；事件、状态和摘要先保存在内存。
+- Git readiness、commit 和提交后状态校验全部完成后，才允许统一写最终任务文件、历史和经验。
+- 验证失败、用户拒绝、状态漂移和 Git 失败同样先结束受保护窗口，再写失败或拒绝审计记录。
+- 不要求 `.agent` 被仓库或全局 ignore，也不为 `.agent` 设置任何特殊状态过滤。
+
+若进程在受保护窗口中被强制终止，持久化任务可能停留在 `provider_completed`/running 状态，目标工作区保留当时现场。本阶段不增加跨进程恢复日志；不能为了避免该限制而在受保护窗口内写审计文件。
 
 ## Git 预检与快照
 
@@ -336,14 +354,15 @@ hook 可能修改工作区或 index。hook 失败后仍按上述规则只取消�
 
 `src/dev_agent/runtime/runner.py`
 
-- 在 apply 前接收已完成的 commit preflight。
+- 在 Provider 基线落盘后、apply 前执行 commit preflight。
+- 受保护窗口内在内存累计状态和事件，结束后统一持久化。
 - 验证通过后执行 readiness、确认和 commit。
 - 统一任务状态、事件与历史记录。
 
 `src/dev_agent/cli.py`
 
 - 注册和校验 `--commit`、`--commit-message`。
-- 在 apply 前创建快照。
+- 构造 commit request 并交给 runner 在正确审计基线后创建快照。
 - 提供第二次确认回调。
 - 输出新增 JSON 字段并映射退出码。
 
@@ -380,6 +399,8 @@ hook 可能修改工作区或 index。hook 失败后仍按上述规则只取消�
 
 - 仅目标发生变化时 readiness 通过。
 - 无关原状态完全未变时保持通过。
+- `.agent/tasks` 和 `.agent/history` 在 preflight 后、Git 校验完成前保持字节不变。
+- commit 成功、拒绝、验证失败和 Git 失败结束后，最终任务事件与历史正确落盘。
 - verifier 新建、修改、删除或暂存目标外路径时拒绝。
 - HEAD 或分支在运行期间变化时拒绝。
 - 运行期间进入 Git 操作状态时拒绝。
@@ -439,6 +460,7 @@ hook 可能修改工作区或 index。hook 失败后仍按上述规则只取消�
 - `--yes` 仅预授权确认，不绕过任何安全校验。
 - 目标路径 apply 前必须干净；无关旧改动允许存在且始终保持原样。
 - 运行期间任何目标外状态漂移、HEAD/分支变化或 Git 操作状态都会阻断提交。
+- runner 自身的 `.agent` 审计写入在受保护窗口内冻结，不加入白名单或状态过滤。
 - 提交只包含执行计划实际修改的目标路径，不包含无关 staged 内容，不创建空提交。
 - commit/hook 失败只取消目标暂存，保留正文和无关状态。
 - 成功提交的父提交、message、文件集合和 SHA 全部经过校验。
